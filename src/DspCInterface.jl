@@ -316,7 +316,7 @@ end
 for (func,rtn) in [(:getNumScenarios, Cint), 
                    (:getTotalNumRows, Cint), 
                    (:getTotalNumCols, Cint), 
-                   (:getSolutionStatus, Cint), 
+                   (:getStatus, Cint), 
                    (:getNumIterations, Cint), 
                    (:getNumNodes, Cint), 
                    (:getSolutionTime, Cdouble), 

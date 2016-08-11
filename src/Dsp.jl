@@ -25,7 +25,7 @@ end
 ###############################################################################
 
 # This function is hooked by JuMP (see block.jl)
-function dsp_solve(m::JuMP.Model; suppress_warmings = false, options...)
+function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
 
     dsp = Dsp.dsp
     if dsp == nothing
@@ -46,7 +46,6 @@ function dsp_solve(m::JuMP.Model; suppress_warmings = false, options...)
             else
                 warn("solve_type $optval is not available.")
             end
-        elseif optname == :suppress_warmings
         else
             warn("Options $optname is not available.")
         end
@@ -59,7 +58,7 @@ function dsp_solve(m::JuMP.Model; suppress_warmings = false, options...)
     DspCInterface.solve(dsp)
 
     # solution status
-    statcode = DspCInterface.getSolutionStatus(dsp)
+    statcode = DspCInterface.getStatus(dsp)
     stat = :Error
     if statcode == 3000
         stat = :Optimal
@@ -128,7 +127,7 @@ end
 # Input/output files
 ###############################################################################
 
-function JuMP.solve(;suppress_warmings = false, options...)
+function JuMP.solve(;suppress_warnings = false, options...)
 
     # parse options
     for (optname, optval) in options
@@ -149,7 +148,7 @@ function JuMP.solve(;suppress_warmings = false, options...)
     DspCInterface.solve(dsp)
 
     # solution status
-    statcode = DspCInterface.getSolutionStatus(dsp)
+    statcode = DspCInterface.getStatus(dsp)
     stat = :Error
     if statcode == 3000
         stat = :Optimal
