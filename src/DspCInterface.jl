@@ -138,7 +138,7 @@ function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaste
     # get DspBlocks
     blocks = model.ext[:DspBlocks]
     
-    nscen  = convert(Cint, length(blocks.block))
+    nscen  = convert(Cint, length(blocks.children))
     ncols1 = convert(Cint, model.numCols)
     nrows1 = convert(Cint, length(model.linconstr))
     ncols2 = 0
@@ -149,8 +149,8 @@ function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaste
     end
     setProcIdxSet(proc_idx_set);
     for s in 1:length(proc_idx_set)
-        ncols2 = convert(Cint, blocks.block[s].numCols)
-        nrows2 = convert(Cint, length(blocks.block[s].linconstr))
+        ncols2 = convert(Cint, blocks.children[s].numCols)
+        nrows2 = convert(Cint, length(blocks.children[s].linconstr))
         break;
     end
     
@@ -169,7 +169,7 @@ function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaste
     
     for s in 1:length(proc_idx_set)
         # get model
-        blk = blocks.block[s]
+        blk = blocks.children[s]
         probability = blocks.weight[s]
         # get model data
         start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(blk)
