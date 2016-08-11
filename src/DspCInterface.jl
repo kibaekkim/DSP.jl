@@ -36,7 +36,11 @@ type DspModel
     function DspModel()
         p = @dsp_ccall("createEnv", Ptr{Void}, ())
         solve_type = :DualDecomp
-        prob = new(p)
+        numRows = 0
+        numCols = 0
+        objVal = nothing
+        colVal = Vector{Float64}()
+        prob = new(p, solve_type, numRows, numCols, objVal, colVal)
         finalizer(prob, freeDSP)
         return prob
     end

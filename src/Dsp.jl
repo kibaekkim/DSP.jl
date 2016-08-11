@@ -46,6 +46,7 @@ function dsp_solve(m::JuMP.Model; suppress_warmings = false, options...)
             else
                 warn("solve_type $optval is not available.")
             end
+        elseif optname == :suppress_warmings
         else
             warn("Options $optname is not available.")
         end
