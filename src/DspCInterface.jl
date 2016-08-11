@@ -203,10 +203,11 @@ end
 
 if isdefined(:MPI) && MPI.Comm_size(MPI.COMM_WORLD) > 1
     for func in [:solveBdMpi, :solveDdMpi]
+        strfunc = string(func)
         @eval begin
             function $func(prob::DspModel, comm)
                 check_problem(prob)
-                return @dsp_ccall("$func", Void, (Ptr{Void}, Cint), prob.p, convert(Cint, comm.val))
+                return @dsp_ccall($strfunc, Void, (Ptr{Void}, Cint), prob.p, convert(Cint, comm.val))
             end
         end
     end
@@ -224,10 +225,11 @@ else
                  :solveDe, 
                  :solveBd, 
                  :solveDd]
+        strfunc = string(func)
         @eval begin
             function $func(prob::DspModel)
                 check_problem(prob)
-                return @dsp_ccall("$func", Void, (Ptr{Void},), prob.p)
+                return @dsp_ccall($strfunc, Void, (Ptr{Void},), prob.p)
             end
         end
     end
@@ -321,10 +323,11 @@ for (func,rtn) in [(:getNumScenarios, Cint),
                    (:getObjValue, Cdouble), 
                    (:getPrimalBound, Cdouble), 
                    (:getDualBound, Cdouble)]
+    strfunc = string(func)
     @eval begin
         function $func(prob::DspModel)
             check_problem(prob)
-            return @dsp_ccall("$func", $rtn, (Ptr{Void},), prob.p)
+            return @dsp_ccall($strfunc, $rtn, (Ptr{Void},), prob.p)
         end
     end
 end
