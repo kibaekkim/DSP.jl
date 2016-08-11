@@ -1,4 +1,3 @@
-using Dsp.DspSolverInterface
 import JuMP
 export @block
 
@@ -23,7 +22,7 @@ macro block(self, child, id, weight)
         $(esc(self)).ext[:DspBlocks].children[$(esc(id))] = $(esc(child))
         $(esc(self)).ext[:DspBlocks].weight[$(esc(id))]   = $(esc(weight))
         if $(esc(self)).ext[:DspBlocks].parent == nothing
-            JuMP.setsolvehook($(esc(self)), DspSolverInterface.dsp_solve)
+            JuMP.setsolvehook($(esc(self)), Dsp.dsp_solve)
         end
     end
 end
