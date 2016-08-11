@@ -9,7 +9,7 @@ using Dsp.DspCInterface
 
 import JuMP
 export getdsp,
-  solve,
+  # solve,
   readSmps
 
 # DspModel placeholder
@@ -126,7 +126,7 @@ end
 # Input/output files
 ###############################################################################
 
-function solve(;suppress_warmings = false, options...)
+function JuMP.solve(;suppress_warmings = false, options...)
 
   # parse options
   for (optname, optval) in options
