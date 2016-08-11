@@ -30,17 +30,21 @@ type DspModel
 
     numRows::Int
     numCols::Int
-    objVal
+    primVal
+    dualVal
     colVal::Vector{Float64}
+    rowVal::Vector{Float64}
 
     function DspModel()
         p = @dsp_ccall("createEnv", Ptr{Void}, ())
-        solve_type = :DualDecomp
+        solve_type = :Dual
         numRows = 0
         numCols = 0
-        objVal = nothing
+        primVal = NaN
+        dualVal = NaN
         colVal = Vector{Float64}()
-        prob = new(p, solve_type, numRows, numCols, objVal, colVal)
+        rowVal = Vector{Float64}()
+        prob = new(p, solve_type, numRows, numCols, primVal, dualVal, colVal, rowVal)
         finalizer(prob, freeDSP)
         return prob
     end
@@ -49,14 +53,17 @@ end
 function freeDSP(prob::DspModel)
     if prob.p == C_NULL
         return
+    else
+        @dsp_ccall("freeEnv", Void, (Ptr{Void},), prob.p)
+        prob.p = C_NULL
     end
-    @dsp_ccall("freeEnv", Void, (Ptr{Void},), prob.p)
-    prob.p = C_NULL
-    solve_type = nothing
-    numRows = 0
-    numCols = 0
-    objVal = nothing
-    colVal = Vector{Float64}()
+    prob.solve_type = nothing
+    prob.numRows = 0
+    prob.numCols = 0
+    prob.primVal = NaN
+    prob.dualVal = NaN
+    prob.colVal = Vector{Float64}()
+    prob.rowVal = Vector{Float64}()
     return
 end
 
@@ -117,8 +124,8 @@ function readSmps(prob::DspModel, filename::AbstractString, dedicatedMaster::Boo
     # Check pointer to TssModel
     check_problem(prob)
     @dsp_ccall("readSmps", Void, (Ptr{Void}, Ptr{UInt8}), prob.p, convert(Vector{UInt8}, filename))
-    nscen = getNumScenarios();
-    proc_idx_set = 1:nscen;
+    nscen = getNumScenarios(prob);
+    proc_idx_set = collect(1:nscen);
     if isdefined(:MPI) == true
         proc_idx_set = getProcIdxSet(nscen, dedicatedMaster);
     end
@@ -213,11 +220,11 @@ if isdefined(:MPI) && MPI.Comm_size(MPI.COMM_WORLD) > 1
     end
     function solve(prob::DspModel)
         if prob.solve_type == :Dual
-            solveDdMpi();
+            solveDdMpi(prob, MPI.COMM_WORLD);
         elseif prob.solve_type == :Benders
-            solveBdMpi();
+            solveBdMpi(prob, MPI.COMM_WORLD);
         elseif prob.solve_type == :Extensive
-            solveDe();
+            solveDe(prob, MPI.COMM_WORLD);
         end
     end
 else
@@ -235,11 +242,11 @@ else
     end
     function solve(prob::DspModel)
         if prob.solve_type == :Dual
-            solveDd();
+            solveDd(prob);
         elseif prob.solve_type == :Benders
-            solveBd();
+            solveBd(prob);
         elseif prob.solve_type == :Extensive
-            solveDe();
+            solveDe(prob);
         end
     end
 end
@@ -316,11 +323,11 @@ end
 for (func,rtn) in [(:getNumScenarios, Cint), 
                    (:getTotalNumRows, Cint), 
                    (:getTotalNumCols, Cint), 
+                   (:getNumCouplingRows, Cint), 
                    (:getStatus, Cint), 
                    (:getNumIterations, Cint), 
                    (:getNumNodes, Cint), 
                    (:getSolutionTime, Cdouble), 
-                   (:getObjValue, Cdouble), 
                    (:getPrimalBound, Cdouble), 
                    (:getDualBound, Cdouble)]
     strfunc = string(func)
@@ -342,14 +349,18 @@ end
 
 function getSolution(prob::DspModel, num::Integer)
     sol = Array(Cdouble, num)
-    @dsp_ccall("getSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), prob.p, num, sol)
+    @dsp_ccall("getPrimalSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), prob.p, num, sol)
     return sol
 end
+getSolution(prob::DspModel) = getSolution(prob, getTotalNumCols(prob))
 
-function getSolution(prob::DspModel)
-    num = getTotalNumCols(prob)
-    return getSolution(prob, num)
+
+function getDualSolution(prob::DspModel, num::Integer)
+    sol = Array(Cdouble, num)
+    @dsp_ccall("getDualSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), prob.p, num, sol)
+    return sol
 end
+getDualSolution(prob::DspModel) = getDualSolution(prob, getNumCouplingRows(prob))
 
 
 ###############################################################################
