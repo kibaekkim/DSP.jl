@@ -4,6 +4,8 @@ import ..Dsp
 import Compat: String, unsafe_wrap
 import JuMP
 
+Pkg.installed("MPI") == nothing || using MPI
+
 export DspModel
 
 ###############################################################################
@@ -218,13 +220,13 @@ if isdefined(:MPI) && MPI.Comm_size(MPI.COMM_WORLD) > 1
             end
         end
     end
-    function solve(prob::DspModel)
+    function solve(prob::DspModel, comm)
         if prob.solve_type == :Dual
-            solveDdMpi(prob, MPI.COMM_WORLD);
+            solveDdMpi(prob, comm);
         elseif prob.solve_type == :Benders
-            solveBdMpi(prob, MPI.COMM_WORLD);
+            solveBdMpi(prob, comm);
         elseif prob.solve_type == :Extensive
-            solveDe(prob, MPI.COMM_WORLD);
+            solveDe(prob);
         end
     end
 else
