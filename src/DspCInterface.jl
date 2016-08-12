@@ -210,7 +210,7 @@ end
 # Get functions
 ###############################################################################
 
-if isdefined(:MPI) && MPI.Comm_size(MPI.COMM_WORLD) > 1
+if isdefined(:MPI) && MPI.Initialized() && MPI.Comm_size(MPI.COMM_WORLD) > 1
     for func in [:solveBdMpi, :solveDdMpi]
         strfunc = string(func)
         @eval begin
