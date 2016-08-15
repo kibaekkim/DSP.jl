@@ -2,7 +2,7 @@
 
 Dsp.jl is an interface to a parallel decomposition mixed-integer programming solver [DSP](https://github.com/Argonne-National-Laboratory/DSP). This package allows users to define block structures in optimization model written in [JuMP](https://github.com/JuliaOpt/JuMP.jl) and solve the block-structured problem using the parallle solver ``DSP``.
 
-# Intall
+# Intallation
 
 ```julia
 Pkg.clone("https://github.com/kibaekkim/Dsp.jl")
