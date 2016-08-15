@@ -114,7 +114,7 @@ function optimize(;suppress_warnings = false, comm = nothing, options...)
     end
 
     # solve
-    DspCInterface.solve(Dsp.model)
+    DspCInterface.solve(Dsp.model, comm)
 
     # solution status
     statcode = DspCInterface.getStatus(Dsp.model)
