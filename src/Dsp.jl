@@ -203,7 +203,6 @@ function getDspSolution(suppress_warnings)
 
     if Dsp.model.solve_type == :Dual
         Dsp.model.rowVal = DspCInterface.getDualSolution(Dsp.model)
-        suppress_warnings || warn("Dual solution is available by getdual(); but, priaml solution is not available")
     else
         Dsp.model.colVal = DspCInterface.getSolution(Dsp.model)
     end
