@@ -1,4 +1,4 @@
-# __precompile__()
+__precompile__()
 
 module Dsp
 
@@ -45,11 +45,12 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
     DspCInterface.solve(Dsp.model)
 
     # solution status
-    statcode = DspCInterface.getStatus(Dsp.model)
+    statcode = DspCInterface.getSolutionStatus(Dsp.model)
     stat = parseStatusCode(statcode)
 
     # Extract solution from the solver
-    Dsp.model.numRows = DspCInterface.getTotalNumRows(Dsp.model)
+    Dsp.model.numRows = DspCInterface.getNumRows(Dsp.model, 0)
+        + DspCInterface.getNumRows(Dsp.model, 1) * DspCInterface.getNumScenarios(Dsp.model)
     Dsp.model.numCols = DspCInterface.getTotalNumCols(Dsp.model)
     m.objVal = NaN
     m.colVal = fill(NaN, Dsp.model.numCols)
@@ -96,7 +97,7 @@ end
 # Input/output files
 ###############################################################################
 
-function JuMP.solve(;suppress_warnings = false, options...)
+function optimize(;suppress_warnings = false, options...)
 
     # parse options
     for (optname, optval) in options
@@ -117,7 +118,7 @@ function JuMP.solve(;suppress_warnings = false, options...)
     DspCInterface.solve(Dsp.model)
 
     # solution status
-    statcode = DspCInterface.getStatus(Dsp.model)
+    statcode = DspCInterface.getSolutionStatus(Dsp.model)
     stat = parseStatusCode(statcode)
 
     # Extract solution from the solver
@@ -135,6 +136,7 @@ function JuMP.solve(;suppress_warnings = false, options...)
     # Return the solve status
     stat
 end
+JuMP.solve(;suppress_warnings = false, options...) = optimize(;suppress_warnings = false, options...)
 
 # Read model from SMPS files
 function readSmps(filename::AbstractString)
@@ -164,6 +166,8 @@ function getblocksolution(m::JuMP.Model)
     sol
 end
 
+# get dual objective value
+getprimobjval() = Dsp.model.primVal
 # get dual objective value
 getdualobjval() = Dsp.model.dualVal
 # get dual value
@@ -200,8 +204,7 @@ function getDspSolution(suppress_warnings)
     Dsp.model.dualVal = DspCInterface.getDualBound(Dsp.model)
 
     if Dsp.model.solve_type == :Dual
-        Dsp.model.rowVal = DspCInterface.getDualSolution(Dsp.model)
-        suppress_warnings || warn("Dual solution is available by getdual(); but, priaml solution is not available")
+        suppress_warnings || warn("Primal solution is not available in dual decomposition")
     else
         Dsp.model.colVal = DspCInterface.getSolution(Dsp.model)
     end

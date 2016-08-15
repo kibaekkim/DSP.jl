@@ -71,7 +71,7 @@ end
 
 function freeModel(prob::DspModel)
     check_problem(prob)
-    @dsp_ccall("freeModel", Void, (Ptr{Void},), prob.p)
+    @dsp_ccall("freeTssModel", Void, (Ptr{Void},), prob.p)
 end
 
 function check_problem(prob::DspModel)
@@ -210,47 +210,24 @@ end
 # Get functions
 ###############################################################################
 
-if isdefined(:MPI) && MPI.Initialized() && MPI.Comm_size(MPI.COMM_WORLD) > 1
-    for func in [:solveBdMpi, :solveDdMpi]
-        strfunc = string(func)
-        @eval begin
-            function $func(prob::DspModel, comm)
-                check_problem(prob)
-                return @dsp_ccall($strfunc, Void, (Ptr{Void}, Cint), prob.p, convert(Cint, comm.val))
-            end
-        end
-    end
-    function solve(prob::DspModel, comm)
-        if prob.solve_type == :Dual
-            solveDdMpi(prob, comm);
-        elseif prob.solve_type == :Benders
-            solveBdMpi(prob, comm);
-        elseif prob.solve_type == :Extensive
-            solveDe(prob);
-        end
-    end
-else
-    for func in [:freeSolver, 
-                 :solveDe, 
-                 :solveBd, 
-                 :solveDd]
-        strfunc = string(func)
-        @eval begin
-            function $func(prob::DspModel)
-                check_problem(prob)
-                return @dsp_ccall($strfunc, Void, (Ptr{Void},), prob.p)
-            end
-        end
-    end
-    function solve(prob::DspModel)
-        if prob.solve_type == :Dual
-            solveDd(prob);
-        elseif prob.solve_type == :Benders
-            solveBd(prob);
-        elseif prob.solve_type == :Extensive
-            solveDe(prob);
-        end
-    end
+function solveDe(prob::DspModel)
+    check_problem(prob)
+    return @dsp_ccall("solveDe", Void, (Ptr{Void},), prob.p)
+end
+
+function solveBd(prob::DspModel)
+    check_problem(prob)
+    return @dsp_ccall("solveBd", Void, (Ptr{Void},), prob.p)
+end
+
+function solveDd(prob::DspModel, comm)
+    check_problem(prob)
+    return @dsp_ccall("solveDd", Void, (Ptr{Void}, Cint), prob.p, convert(Cint, comm.val))
+end
+
+function solveBdMpi(prob::DspModel, comm)
+    check_problem(prob)
+    return @dsp_ccall("solveBdMpi", Void, (Ptr{Void}, Cint, Cint), prob.p, 1, convert(Cint, comm.val))
 end
 
 ###############################################################################
@@ -323,10 +300,8 @@ function getDataFormat(model::JuMP.Model)
 end
 
 for (func,rtn) in [(:getNumScenarios, Cint), 
-                   (:getTotalNumRows, Cint), 
                    (:getTotalNumCols, Cint), 
-                   (:getNumCouplingRows, Cint), 
-                   (:getStatus, Cint), 
+                   (:getSolutionStatus, Cint), 
                    (:getNumIterations, Cint), 
                    (:getNumNodes, Cint), 
                    (:getSolutionTime, Cdouble), 
@@ -351,19 +326,10 @@ end
 
 function getSolution(prob::DspModel, num::Integer)
     sol = Array(Cdouble, num)
-    @dsp_ccall("getPrimalSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), prob.p, num, sol)
+    @dsp_ccall("getSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), prob.p, num, sol)
     return sol
 end
 getSolution(prob::DspModel) = getSolution(prob, getTotalNumCols(prob))
-
-
-function getDualSolution(prob::DspModel, num::Integer)
-    sol = Array(Cdouble, num)
-    @dsp_ccall("getDualSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), prob.p, num, sol)
-    return sol
-end
-getDualSolution(prob::DspModel) = getDualSolution(prob, getNumCouplingRows(prob))
-
 
 ###############################################################################
 # Set functions
