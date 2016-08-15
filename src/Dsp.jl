@@ -96,7 +96,7 @@ end
 # Input/output files
 ###############################################################################
 
-function JuMP.solve(;suppress_warnings = false, options...)
+function optimize(;suppress_warnings = false, comm = nothing, options...)
 
     # parse options
     for (optname, optval) in options
@@ -164,6 +164,8 @@ function getblocksolution(m::JuMP.Model)
     sol
 end
 
+# get dual objective value
+getprimobjval() = Dsp.model.primVal
 # get dual objective value
 getdualobjval() = Dsp.model.dualVal
 # get dual value

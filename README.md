@@ -2,13 +2,15 @@
 
 Dsp.jl is an interface to a parallel decomposition mixed-integer programming solver [DSP](https://github.com/Argonne-National-Laboratory/DSP). This package allows users to define block structures in optimization model written in [JuMP](https://github.com/JuliaOpt/JuMP.jl) and solve the block-structured problem using the parallle solver ``DSP``.
 
-# Intall
+# Intallation
 
 ```julia
 Pkg.clone("https://github.com/kibaekkim/Dsp.jl")
 ```
 
 # Example
+
+DSP can read and solve model from JuMP:
 
 ```julia
 using Dsp, JuMP
@@ -27,11 +29,26 @@ for s = 1:3
 
     # Model m has block blk indexed by s with objective function weight of 1/3.
     @block(m, blk, s, 1/3)
-    
+
 end
 
 solve_types = [:Dual, :Benders, :Extensive]
-solve(m, solve_type = solve_types[1])
+solve(m, solve_type = solve_types[1], param = "myparam.txt")
 
 getobjectivevalue(m)
+```
+
+or, it can also read and solve model from SMPS files:
+
+```julia
+using Dsp
+
+# Assumming we have mysmps.cor, mysmps.tim, and mysmps.sto
+readSmps("mysmps")
+
+solve_types = [:Dual, :Benders, :Extensive]
+optimize(solve_type = solve_types[1], param = "myparam.txt")
+
+println(getprimobjval())
+println(getdualobjval())
 ```

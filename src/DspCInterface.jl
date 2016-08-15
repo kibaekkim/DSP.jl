@@ -210,43 +210,51 @@ end
 # Get functions
 ###############################################################################
 
-if isdefined(:MPI) && MPI.Initialized() && MPI.Comm_size(MPI.COMM_WORLD) > 1
-    for func in [:solveBdMpi, :solveDdMpi]
-        strfunc = string(func)
-        @eval begin
-            function $func(prob::DspModel, comm)
-                check_problem(prob)
-                return @dsp_ccall($strfunc, Void, (Ptr{Void}, Cint), prob.p, convert(Cint, comm.val))
-            end
+for func in [:freeSolver, 
+             :solveDe, 
+             :solveBd, 
+             :solveDd]
+    strfunc = string(func)
+    @eval begin
+        function $func(prob::DspModel)
+            check_problem(prob)
+            return @dsp_ccall($strfunc, Void, (Ptr{Void},), prob.p)
         end
     end
-    function solve(prob::DspModel, comm)
-        if prob.solve_type == :Dual
-            solveDdMpi(prob, comm);
-        elseif prob.solve_type == :Benders
-            solveBdMpi(prob, comm);
-        elseif prob.solve_type == :Extensive
-            solveDe(prob);
+end
+
+for func in [:solveBdMpi, :solveDdMpi]
+    strfunc = string(func)
+    @eval begin
+        function $func(prob::DspModel, comm)
+            check_problem(prob)
+            return @dsp_ccall($strfunc, Void, (Ptr{Void}, Cint), prob.p, convert(Cint, comm.val))
         end
     end
-else
-    for func in [:freeSolver, 
-                 :solveDe, 
-                 :solveBd, 
-                 :solveDd]
-        strfunc = string(func)
-        @eval begin
-            function $func(prob::DspModel)
-                check_problem(prob)
-                return @dsp_ccall($strfunc, Void, (Ptr{Void},), prob.p)
-            end
-        end
-    end
-    function solve(prob::DspModel)
+end
+
+function solve(prob::DspModel, comm = nothing)
+    if comm == nothing
         if prob.solve_type == :Dual
             solveDd(prob);
         elseif prob.solve_type == :Benders
             solveBd(prob);
+        elseif prob.solve_type == :Extensive
+            solveDe(prob);
+        end
+    elseif isdefined(:MPI) && MPI.Initialized()
+        if prob.solve_type == :Dual
+            if MPI.Comm_size(MPI.COMM_WORLD) > 1
+                solveDdMpi(prob, comm);
+            else
+                solveDd(prob);
+            end
+        elseif prob.solve_type == :Benders
+            if MPI.Comm_size(MPI.COMM_WORLD) > 1
+                solveBdMpi(prob, comm);
+            else
+                solveBd(prob);
+            end
         elseif prob.solve_type == :Extensive
             solveDe(prob);
         end
