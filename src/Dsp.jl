@@ -18,7 +18,7 @@ model = DspModel()
 ###############################################################################
 
 # This function is hooked by JuMP (see block.jl)
-function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
+function dsp_solve(m::JuMP.Model; suppress_warnings = false, comm = nothing, options...)
 
     # free DspModel
     DspCInterface.freeModel(Dsp.model)
@@ -42,7 +42,7 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
     DspCInterface.loadProblem(Dsp.model, m)
 
     # solve
-    DspCInterface.solve(Dsp.model)
+    DspCInterface.solve(Dsp.model, comm)
 
     # solution status
     statcode = DspCInterface.getStatus(Dsp.model)
