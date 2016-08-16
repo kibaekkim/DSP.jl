@@ -8,7 +8,7 @@ include("block.jl")
 using Dsp.DspCInterface
 
 import JuMP
-export readSmps, getblocksolution, getdualobjval, optimize
+export readSmps, getblocksolution, optimize, getprimobjval, getdualobjval
 
 # DspModel placeholder
 model = DspModel()
