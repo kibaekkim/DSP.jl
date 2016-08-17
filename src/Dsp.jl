@@ -39,7 +39,7 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, comm = nothing, opt
     end
 
     # load JuMP model to Dsp
-    DspCInterface.loadProblem(Dsp.model, m)
+    DspCInterface.loadProblem(Dsp.model, m, true)
 
     # solve
     DspCInterface.solve(Dsp.model, comm)
@@ -143,7 +143,7 @@ function readSmps(filename::AbstractString)
     DspCInterface.freeModel(Dsp.model)
 
     # read Smps file
-    DspCInterface.readSmps(Dsp.model, filename)
+    DspCInterface.readSmps(Dsp.model, filename, true)
 end
 
 ###############################################################################
