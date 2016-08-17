@@ -170,6 +170,8 @@ getprimobjval() = Dsp.model.primVal
 getdualobjval() = Dsp.model.dualVal
 # get dual value
 JuMP.getdual() = Dsp.model.rowVal
+# get solution time
+getsolutiontime() = DspCInterface.getSolutionTime(Dsp.model)
 
 function parseStatusCode(statcode::Integer)
     stat = :NotSolved
