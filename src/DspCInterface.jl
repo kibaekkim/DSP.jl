@@ -182,14 +182,15 @@ function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaste
     
     for s in 1:length(proc_idx_set)
         # get model
-        blk = blocks.children[s]
-        probability = blocks.weight[s]
+        blk_id = proc_idx_set[s]
+        blk = blocks.children[blk_id]
+        probability = blocks.weight[blk_id]
         # get model data
         start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(blk)
         @dsp_ccall("loadSecondStage", Void, 
             (Ptr{Void}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, 
                 Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}), 
-            prob.p, proc_idx_set[s]-1, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
+            prob.p, blk_id-1, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
     end
     
 end
