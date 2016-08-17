@@ -346,7 +346,7 @@ for (func,rtn) in [(:getNumScenarios, Cint),
                    (:getStatus, Cint), 
                    (:getNumIterations, Cint), 
                    (:getNumNodes, Cint), 
-                   (:getSolutionTime, Cdouble), 
+                   (:getWallTime, Cdouble), 
                    (:getPrimalBound, Cdouble), 
                    (:getDualBound, Cdouble)]
     strfunc = string(func)
