@@ -128,7 +128,7 @@ function readSmps(prob::DspModel, filename::AbstractString, dedicatedMaster::Boo
     @dsp_ccall("readSmps", Void, (Ptr{Void}, Ptr{UInt8}), prob.p, convert(Vector{UInt8}, filename))
     nscen = getNumScenarios(prob);
     proc_idx_set = collect(1:nscen);
-    if isdefined(:MPI) == true
+    if isdefined(:MPI) == true && MPI.Initialized() == true
         proc_idx_set = getProcIdxSet(nscen, dedicatedMaster);
     end
     setProcIdxSet(prob, proc_idx_set);  
@@ -279,7 +279,7 @@ function getProcIdxSet(numScens::Integer, dedicatedMaster::Bool)
     # DSP is further parallelized with mysize > numScens.
     modrank = myrank % numScens;
     
-    if dedicatedMaster == true
+    if dedicatedMaster == true && mysize > 1
         if myrank == 0
             return proc_idx_set;
         end
