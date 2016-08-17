@@ -72,6 +72,12 @@ end
 function freeModel(prob::DspModel)
     check_problem(prob)
     @dsp_ccall("freeModel", Void, (Ptr{Void},), prob.p)
+    prob.numRows = 0
+    prob.numCols = 0
+    prob.primVal = NaN
+    prob.dualVal = NaN
+    prob.colVal = Vector{Float64}()
+    prob.rowVal = Vector{Float64}()
 end
 
 function check_problem(prob::DspModel)
