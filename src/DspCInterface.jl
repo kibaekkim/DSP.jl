@@ -156,12 +156,7 @@ function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaste
     nrows1 = convert(Cint, length(model.linconstr))
     ncols2 = 0
     nrows2 = 0
-    proc_idx_set = collect(1:nscen);
-    if isdefined(:MPI) == true && MPI.Initialized() == true
-        proc_idx_set = getProcIdxSet(nscen, dedicatedMaster);
-    end
-    setProcIdxSet(prob, proc_idx_set);
-    for s in 1:length(proc_idx_set)
+    for s in 1:nscen
         ncols2 = convert(Cint, blocks.children[s].numCols)
         nrows2 = convert(Cint, length(blocks.children[s].linconstr))
         break;
@@ -180,6 +175,13 @@ function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaste
             Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             prob.p, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
     
+    # set scenario indices for each MPI processor
+    proc_idx_set = collect(1:nscen);
+    if isdefined(:MPI) == true && MPI.Initialized() == true
+        proc_idx_set = getProcIdxSet(nscen, dedicatedMaster);
+    end
+    setProcIdxSet(prob, proc_idx_set);
+
     for s in 1:length(proc_idx_set)
         # get model
         blk_id = proc_idx_set[s]
