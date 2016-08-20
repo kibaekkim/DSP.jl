@@ -173,7 +173,7 @@ JuMP.getdual() = Dsp.model.rowVal
 # get solution time
 getsolutiontime() = DspCInterface.getWallTime(Dsp.model)
 # get block ids
-getblockids(nblocks::Integer) = getProcIdxSet(nblocks)
+getblockids(nblocks::Integer) = DspCInterface.getProcIdxSet(nblocks)
 
 function parseStatusCode(statcode::Integer)
     stat = :NotSolved
