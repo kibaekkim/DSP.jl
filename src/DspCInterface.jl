@@ -172,8 +172,8 @@ function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaste
     proc_idx_set = collect(1:nscen);
     if isdefined(:MPI) == true && MPI.Initialized() == true
         proc_idx_set = getProcIdxSet(nscen, dedicatedMaster);
-        MPI.Reduce(ncols2, 1, MPI.MAX, 0, MPI.COMM_WORLD)
-        MPI.Reduce(nrows2, 1, MPI.MAX, 0, MPI.COMM_WORLD)
+        MPI.Reduce(ncols2, MPI.MAX, 0, MPI.COMM_WORLD)
+        MPI.Reduce(nrows2, MPI.MAX, 0, MPI.COMM_WORLD)
     end
     setProcIdxSet(prob, proc_idx_set);
     
