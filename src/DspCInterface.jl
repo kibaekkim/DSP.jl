@@ -162,11 +162,20 @@ function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaste
     nrows1 = convert(Cint, length(model.linconstr))
     ncols2 = 0
     nrows2 = 0
-    for s in 1:nscen
-        ncols2 = convert(Cint, blocks.children[s].numCols)
-        nrows2 = convert(Cint, length(blocks.children[s].linconstr))
+    for s in values(blocks.children)
+        ncols2 = convert(Cint, s.numCols)
+        nrows2 = convert(Cint, length(s.linconstr))
         break;
     end
+    
+    # set scenario indices for each MPI processor
+    proc_idx_set = collect(1:nscen);
+    if isdefined(:MPI) == true && MPI.Initialized() == true
+        proc_idx_set = getProcIdxSet(nscen, dedicatedMaster);
+        MPI.Reduce(ncols2, 1, MAX, 0, MPI.COMM_WORLD)
+        MPI.Reduce(nrows2, 1, MAX, 0, MPI.COMM_WORLD)
+    end
+    setProcIdxSet(prob, proc_idx_set);
     
     @dsp_ccall("setNumberOfScenarios", Void, (Ptr{Void}, Cint), prob.p, nscen)
     @dsp_ccall("setDimensions", Void, 
@@ -180,13 +189,6 @@ function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaste
         (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, 
             Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             prob.p, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
-    
-    # set scenario indices for each MPI processor
-    proc_idx_set = collect(1:nscen);
-    if isdefined(:MPI) == true && MPI.Initialized() == true
-        proc_idx_set = getProcIdxSet(nscen, dedicatedMaster);
-    end
-    setProcIdxSet(prob, proc_idx_set);
 
     for s in 1:length(proc_idx_set)
         # get model
