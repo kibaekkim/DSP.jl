@@ -8,7 +8,7 @@ include("block.jl")
 using Dsp.DspCInterface
 
 import JuMP
-export readSmps, getblocksolution, optimize, getprimobjval, getdualobjval, getsolutiontime
+export readSmps, getblocksolution, optimize, getprimobjval, getdualobjval, getsolutiontime, getblockids
 
 # DspModel placeholder
 model = DspModel()
@@ -39,7 +39,7 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, comm = nothing, opt
     end
 
     # load JuMP model to Dsp
-    DspCInterface.loadProblem(Dsp.model, m, true)
+    DspCInterface.loadProblem(Dsp.model, m)
 
     # solve
     DspCInterface.solve(Dsp.model, comm)
@@ -143,7 +143,7 @@ function readSmps(filename::AbstractString)
     DspCInterface.freeModel(Dsp.model)
 
     # read Smps file
-    DspCInterface.readSmps(Dsp.model, filename, true)
+    DspCInterface.readSmps(Dsp.model, filename)
 end
 
 ###############################################################################
@@ -172,6 +172,8 @@ getdualobjval() = Dsp.model.dualVal
 JuMP.getdual() = Dsp.model.rowVal
 # get solution time
 getsolutiontime() = DspCInterface.getWallTime(Dsp.model)
+# get block ids
+getblockids(nblocks::Integer) = getProcIdxSet(nblocks)
 
 function parseStatusCode(statcode::Integer)
     stat = :NotSolved

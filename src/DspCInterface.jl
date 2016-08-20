@@ -139,7 +139,7 @@ function readSmps(prob::DspModel, filename::AbstractString, dedicatedMaster::Boo
     end
     setProcIdxSet(prob, proc_idx_set);  
 end
-readSmps(prob::DspModel, filename::AbstractString) = readSmps(prob, filename, false);
+readSmps(prob::DspModel, filename::AbstractString) = readSmps(prob, filename, true);
 
 function loadProblem(prob::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
     check_problem(prob)
@@ -150,7 +150,7 @@ function loadProblem(prob::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
         loadDeterministicProblem(prob, model);
     end
 end
-loadProblem(prob::DspModel, model::JuMP.Model) = loadProblem(prob, model, false);
+loadProblem(prob::DspModel, model::JuMP.Model) = loadProblem(prob, model, true);
 
 function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
     
