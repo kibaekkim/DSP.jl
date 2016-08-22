@@ -8,10 +8,51 @@ include("block.jl")
 using Dsp.DspCInterface
 
 import JuMP
-export readSmps, getblocksolution, optimize, getprimobjval, getdualobjval, getsolutiontime, getblockids
+export readSmps, 
+    getblocksolution, 
+    optimize, 
+    getprimobjval, 
+    getdualobjval, 
+    getprimvalue,
+    getdualvalue,
+    getsolutiontime, 
+    blockids
 
 # DspModel placeholder
 model = DspModel()
+
+###############################################################################
+# Override JuMP.Model
+###############################################################################
+
+# This is for the master problem.
+function JuMP.Model(nblocks::Integer)
+    # set block ids
+    DspCInterface.setBlockIds(Dsp.model, nblocks)
+    # construct model
+    m = JuMP.Model()
+    # set extension
+    m.ext[:DspBlocks] = BlockStructure(nothing, Dict{Int,JuMP.Model}(), Dict{Int,Float64}())
+    # set solvehook
+    JuMP.setsolvehook(m, Dsp.dsp_solve)
+    # return model
+    m
+end
+
+# This is for the subproblems.
+function JuMP.Model(parent::JuMP.Model, id::Integer, weight::Float64 = 1.0)
+    # set number of blocks
+    Dsp.model.nblocks = nblocks
+    # construct model
+    m = JuMP.Model()
+    # set extension
+    m.ext[:DspBlocks] = BlockStructure(nothing, Dict{Int,JuMP.Model}(), Dict{Int,Float64}())
+    # set block
+    parent.ext[:DspBlocks].children = m
+    parent.ext[:DspBlocks].weight   = weight
+    # return model
+    m
+end
 
 ###############################################################################
 # JuMP.solvehook
@@ -59,37 +100,11 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, comm = nothing, opt
     end
 
     if !(stat == :Infeasible || stat == :Unbounded)
-        try
-            getDspSolution(suppress_warnings)
-
-            # Don't corrupt the answers if one of the above two calls fails
-            m.objVal = Dsp.model.primVal
-            # parse solution to each block
-            n_start = 1
-            n_end = m.numCols
-            m.colVal = copy(Dsp.model.colVal[n_start:n_end])
-            n_start += m.numCols
-            if haskey(m.ext, :DspBlocks) == true
-                blocks = m.ext[:DspBlocks].children
-                for s in keys(blocks)
-                    n_end += blocks[s].numCols
-                    blocks[s].colVal = Dsp.model.colVal[n_start:n_end]
-                    n_start += blocks[s].numCols
-                end
-            end
-        end
-    end
-
-    # maximization?
-    if m.objSense == :Max
-        m.objVal *= -1
-        dsp.primVal *= -1
-        dsp.dualVal *= -1
+        getDspSolution(m)
     end
 
     # Return the solve status
     stat
-
 end
 
 ###############################################################################
@@ -129,7 +144,7 @@ function optimize(;suppress_warnings = false, comm = nothing, options...)
     end
 
     if !(stat == :Infeasible || stat == :Unbounded)
-        getDspSolution(suppress_warnings)
+        getDspSolution()
     end
 
     # Return the solve status
@@ -138,10 +153,8 @@ end
 
 # Read model from SMPS files
 function readSmps(filename::AbstractString)
-
     # free DspModel
     DspCInterface.freeModel(Dsp.model)
-
     # read Smps file
     DspCInterface.readSmps(Dsp.model, filename)
 end
@@ -168,12 +181,14 @@ end
 getprimobjval() = Dsp.model.primVal
 # get dual objective value
 getdualobjval() = Dsp.model.dualVal
+# get primal value
+getprimvalue() = Dsp.model.colVal
 # get dual value
-JuMP.getdual() = Dsp.model.rowVal
+getdualvalue() = Dsp.model.rowVal
 # get solution time
 getsolutiontime() = DspCInterface.getWallTime(Dsp.model)
 # get block ids
-getblockids(nblocks::Integer) = DspCInterface.getProcIdxSet(nblocks)
+blockids() = Dsp.model.block_ids
 
 function parseStatusCode(statcode::Integer)
     stat = :NotSolved
@@ -201,7 +216,7 @@ function parseStatusCode(statcode::Integer)
     stat
 end
 
-function getDspSolution(suppress_warnings)
+function getDspSolution(m::JuMP.Model == nothing)
     Dsp.model.primVal = DspCInterface.getPrimalBound(Dsp.model)
     Dsp.model.dualVal = DspCInterface.getDualBound(Dsp.model)
 
@@ -209,6 +224,33 @@ function getDspSolution(suppress_warnings)
         Dsp.model.rowVal = DspCInterface.getDualSolution(Dsp.model)
     else
         Dsp.model.colVal = DspCInterface.getSolution(Dsp.model)
+    end
+
+    if m != nothing
+        m.objVal = Dsp.model.primVal
+        # parse solution to each block
+        n_start = 1
+        n_end = m.numCols
+        m.colVal = Dsp.model.colVal[n_start:n_end]
+        n_start += m.numCols
+        if haskey(m.ext, :DspBlocks) == true
+            numBlockCols = DspCInterface.getNumBlockCols(Dsp.model, m)
+            blocks = m.ext[:DspBlocks].children
+            for b in numBlockCols
+                n_end += b.second
+                if haskey(blocks, b.first)
+                    blocks[b.first].colVal = Dsp.model.colVal[n_start:n_end]
+                end
+                n_end += b.second
+            end
+        end
+
+        # maximization?
+        if m.objSense == :Max
+            m.objVal *= -1
+            dsp.primVal *= -1
+            dsp.dualVal *= -1
+        end
     end
 end
 

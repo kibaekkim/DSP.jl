@@ -24,6 +24,9 @@ end
 type DspModel
     p::Ptr{Void}
 
+    # Number of blocks
+    nblocks::Int
+
     # solve_type should be one of these:
     # :Dual
     # :Benders
@@ -37,8 +40,21 @@ type DspModel
     colVal::Vector{Float64}
     rowVal::Vector{Float64}
 
+    # MPI settings
+    comm
+    comm_size::Int
+    comm_rank::Int
+
+    # Array of block ids:
+    # The size of array is not necessarily same as nblocks,
+    # as block ids may be distributed to multiple processors.
+    block_ids::Vector{Integer}
+
     function DspModel()
+        # assign Dsp pointer
         p = @dsp_ccall("createEnv", Ptr{Void}, ())
+        # initialize variables
+        nblocks = 0
         solve_type = :Dual
         numRows = 0
         numCols = 0
@@ -46,50 +62,58 @@ type DspModel
         dualVal = NaN
         colVal = Vector{Float64}()
         rowVal = Vector{Float64}()
-        prob = new(p, solve_type, numRows, numCols, primVal, dualVal, colVal, rowVal)
-        finalizer(prob, freeDSP)
-        return prob
+        comm = nothing
+        comm_size = 1
+        comm_rank = 0
+        block_ids = Vector{Integer}()
+        # create DspModel
+        dsp = new(p, nblocks, solve_type, numRows, numCols, primVal, dualVal, colVal, rowVal, comm, comm_size, comm_rank, block_ids)
+        # with finalizer
+        finalizer(dsp, freeDSP)
+        # return DspModel
+        return dsp
     end
 end
 
-function freeDSP(prob::DspModel)
-    if prob.p == C_NULL
+function freeDSP(dsp::DspModel)
+    if dsp.p == C_NULL
         return
     else
-        @dsp_ccall("freeEnv", Void, (Ptr{Void},), prob.p)
-        prob.p = C_NULL
+        @dsp_ccall("freeEnv", Void, (Ptr{Void},), dsp.p)
+        dsp.p = C_NULL
     end
-    prob.solve_type = nothing
-    prob.numRows = 0
-    prob.numCols = 0
-    prob.primVal = NaN
-    prob.dualVal = NaN
-    prob.colVal = Vector{Float64}()
-    prob.rowVal = Vector{Float64}()
+    dsp.nblocks = 0
+    dsp.solve_type = nothing
+    dsp.numRows = 0
+    dsp.numCols = 0
+    dsp.primVal = NaN
+    dsp.dualVal = NaN
+    dsp.colVal = Vector{Float64}()
+    dsp.rowVal = Vector{Float64}()
     return
 end
 
-function freeModel(prob::DspModel)
-    check_problem(prob)
-    @dsp_ccall("freeModel", Void, (Ptr{Void},), prob.p)
-    prob.numRows = 0
-    prob.numCols = 0
-    prob.primVal = NaN
-    prob.dualVal = NaN
-    prob.colVal = Vector{Float64}()
-    prob.rowVal = Vector{Float64}()
+function freeModel(dsp::DspModel)
+    check_problem(dsp)
+    @dsp_ccall("freeModel", Void, (Ptr{Void},), dsp.p)
+    dsp.nblocks = 0
+    dsp.numRows = 0
+    dsp.numCols = 0
+    dsp.primVal = NaN
+    dsp.dualVal = NaN
+    dsp.colVal = Vector{Float64}()
+    dsp.rowVal = Vector{Float64}()
 end
 
-function check_problem(prob::DspModel)
-    if prob.p == C_NULL
+function check_problem(dsp::DspModel)
+    if dsp.p == C_NULL
         error("Invalid DspModel")
     end
-    return true
 end
 
-function readParamFile(prob::DspModel, param_file::AbstractString)
-    check_problem(prob)
-    @dsp_ccall("readParamFile", Void, (Ptr{Void}, Ptr{UInt8}), prob.p, param_file);
+function readParamFile(dsp::DspModel, param_file::AbstractString)
+    check_problem(dsp)
+    @dsp_ccall("readParamFile", Void, (Ptr{Void}, Ptr{UInt8}), dsp.p, param_file);
 end
 
 function prepConstrMatrix(m::JuMP.Model)
@@ -123,41 +147,117 @@ function prepConstrMatrix(m::JuMP.Model)
     return sparse(rind, cind, value, length(m.linconstr), blocks.parent.numCols + m.numCols)
 end
 
+###############################################################################
+# Block IDs
+###############################################################################
+
+function setBlockIds(dsp::DspModel, nblocks::Integer)
+    check_problem(dsp)
+    # set number of blocks
+    dsp.nblocks = nblocks
+    # set MPI settings
+    if isdefined(:MPI) && MPI.Initialized()
+        dsp.comm = MPI.COMM_WORLD
+        dsp.comm_size = MPI.Comm_size(comm)
+        dsp.comm_rank = MPI.Comm_rank(comm)
+    end
+    # get block ids with MPI settings
+    dsp.block_ids = getBlockIds(dsp)
+    # send the block ids to Dsp
+    @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}), 
+        dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids - 1))
+end
+
+function getBlockIds(dsp::DspModel)
+    check_problem(dsp)
+    # processor info
+    mysize = dsp.comm_size
+    myrank = dsp.comm_rank
+    # empty block ids
+    proc_idx_set = Int[]
+    # DSP is further parallelized with mysize > dsp.nblocks.
+    modrank = myrank % dsp.nblocks
+    # If we have more than one processor, 
+    # do not assign a sub-block to the master.
+    if mysize > 1
+        if myrank == 0
+            return proc_idx_set
+        end
+        # exclude master
+        mysize -= 1;
+        modrank = (myrank-1) % dsp.nblocks
+    end
+    # assign sub-blocks in round-robin fashion
+    for s = modrank:mysize:(dsp.nblocks-1)
+        push!(proc_idx_set, s+1)
+    end
+    # return assigned block ids
+    return proc_idx_set
+end
+
+function getNumBlockCols(dsp::DspModel, m::JuMP.Model)
+    check_problem(dsp)
+    # subblocks
+    blocks = m.ext[:DspBlocks].children
+    # get number of block columns
+    numBlockCols = Dict{Int,Int}()
+    if dps.comm_size > 1
+        block_ids = MPI.Allgatherv(keys(blocks), length(blocks))
+        ncols_to_send = [blocks[i].numCols for i in keys(blocks)]
+        ncols = MPI.Allgatherv(ncols_to_send, length(blocks))
+        @show block_ids
+        @show ncols
+        for i in 1:dsp.nblocks
+            setindex!(numBlockCols, ncols[i], ids[i])
+        end
+    else
+        for b in blocks
+            setindex!(numBlockCols, b.second.numCols, b.first)
+        end
+    end
+    @show numBlockCols
+    return numBlockCols
+end
 
 ###############################################################################
 # Load problems
 ###############################################################################
 
-function readSmps(prob::DspModel, filename::AbstractString, dedicatedMaster::Bool)
+function readSmps(dsp::DspModel, filename::AbstractString)
     # Check pointer to TssModel
-    check_problem(prob)
-    @dsp_ccall("readSmps", Void, (Ptr{Void}, Ptr{UInt8}), prob.p, convert(Vector{UInt8}, filename))
-    nscen = getNumScenarios(prob);
-    proc_idx_set = collect(1:nscen);
-    if isdefined(:MPI) == true && MPI.Initialized() == true
-        proc_idx_set = getProcIdxSet(nscen, dedicatedMaster);
-    end
-    setProcIdxSet(prob, proc_idx_set);  
+    check_problem(dsp)
+    # read smps files
+    @dsp_ccall("readSmps", Void, (Ptr{Void}, Ptr{UInt8}), dsp.p, convert(Vector{UInt8}, filename))
+    # set block Ids
+    setBlockIds(dsp, getNumScenarios(dsp))
 end
-readSmps(prob::DspModel, filename::AbstractString) = readSmps(prob, filename, true);
 
-function loadProblem(prob::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
-    check_problem(prob)
+function loadProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
+    check_problem(dsp)
     if haskey(model.ext, :DspBlocks)
-        loadStochasticProblem(prob, model, dedicatedMaster);
+        loadStochasticProblem(dsp, model, dedicatedMaster)
+
+        # children = model.ext[:DspBlocks].children
+        # ids = MPI.Allgatherv(keys(children), length(children))
+        # ncols_to_send = [children[i].numCols for i in keys(children)]
+        # ncols_to_recv = MPI.Allgatherv(ncols_to_send, length(children))
+        # ncols = zeros(Int64, prob.nblocks)
+        # for i in 1:prob.nblocks
+        #     ncols[ids[i]] = ncols_to_recv[i]
+        # end
     else
         warn("No block is defined.")
-        loadDeterministicProblem(prob, model);
+        loadDeterministicProblem(dsp, model)
     end
 end
-loadProblem(prob::DspModel, model::JuMP.Model) = loadProblem(prob, model, true);
+loadProblem(dsp::DspModel, model::JuMP.Model) = loadProblem(dsp, model, true);
 
-function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
+function loadStochasticProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
     
     # get DspBlocks
     blocks = model.ext[:DspBlocks]
     
-    nscen  = convert(Cint, length(blocks.children))
+    nscen  = convert(Cint, dsp.nblocks)
     ncols1 = convert(Cint, model.numCols)
     nrows1 = convert(Cint, length(model.linconstr))
     ncols2 = 0
@@ -165,22 +265,19 @@ function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaste
     for s in values(blocks.children)
         ncols2 = convert(Cint, s.numCols)
         nrows2 = convert(Cint, length(s.linconstr))
-        break;
+        break
     end
     
     # set scenario indices for each MPI processor
-    proc_idx_set = collect(1:nscen);
-    if isdefined(:MPI) == true && MPI.Initialized() == true
-        proc_idx_set = getProcIdxSet(nscen, dedicatedMaster);
-        MPI.Reduce(ncols2, MPI.MAX, 0, MPI.COMM_WORLD)
-        MPI.Reduce(nrows2, MPI.MAX, 0, MPI.COMM_WORLD)
+    if comm_size > 1
+        ncols2 = MPI.Reduce(ncols2, MPI.MAX, 0, dsp.comm)
+        nrows2 = MPI.Reduce(nrows2, MPI.MAX, 0, dsp.comm)
     end
-    setProcIdxSet(prob, proc_idx_set);
     
-    @dsp_ccall("setNumberOfScenarios", Void, (Ptr{Void}, Cint), prob.p, nscen)
+    @dsp_ccall("setNumberOfScenarios", Void, (Ptr{Void}, Cint), dsp.p, nscen)
     @dsp_ccall("setDimensions", Void, 
         (Ptr{Void}, Cint, Cint, Cint, Cint), 
-        prob.p, ncols1, nrows1, ncols2, nrows2)
+        dsp.p, ncols1, nrows1, ncols2, nrows2)
     
     # get problem data
     start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
@@ -188,24 +285,23 @@ function loadStochasticProblem(prob::DspModel, model::JuMP.Model, dedicatedMaste
     @dsp_ccall("loadFirstStage", Void, 
         (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, 
             Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
-            prob.p, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
+            dsp.p, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
 
-    for s in 1:length(proc_idx_set)
-        # get model
-        blk_id = proc_idx_set[s]
-        blk = blocks.children[blk_id]
-        probability = blocks.weight[blk_id]
+    for id in dsp.block_ids
+        # model and probability
+        blk = blocks.children[id]
+        probability = blocks.weight[id]
         # get model data
         start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(blk)
         @dsp_ccall("loadSecondStage", Void, 
             (Ptr{Void}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, 
                 Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}), 
-            prob.p, blk_id-1, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
+            dsp.p, id-1, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
     end
     
 end
 
-function loadDeterministicProblem(prob::DspModel, model::JuMP.Model)
+function loadDeterministicProblem(dsp::DspModel, model::JuMP.Model)
     ncols = convert(Cint, model.numCols)
     nrows = convert(Cint, length(model.linconstr))
     start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
@@ -213,7 +309,7 @@ function loadDeterministicProblem(prob::DspModel, model::JuMP.Model)
     @dsp_ccall("loadDeterministic", Void, 
         (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Cint, Cint, 
             Ptr{Cdouble}, Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
-            prob.p, start, index, value, numels, ncols, nrows, clbd, cubd, ctype, obj, rlbd, rubd)
+            dsp.p, start, index, value, numels, ncols, nrows, clbd, cubd, ctype, obj, rlbd, rubd)
 end
 
 
@@ -227,9 +323,8 @@ for func in [:freeSolver,
              :solveDd]
     strfunc = string(func)
     @eval begin
-        function $func(prob::DspModel)
-            check_problem(prob)
-            return @dsp_ccall($strfunc, Void, (Ptr{Void},), prob.p)
+        function $func(dsp::DspModel)
+            return @dsp_ccall($strfunc, Void, (Ptr{Void},), dsp.p)
         end
     end
 end
@@ -237,37 +332,29 @@ end
 for func in [:solveBdMpi, :solveDdMpi]
     strfunc = string(func)
     @eval begin
-        function $func(prob::DspModel, comm)
-            check_problem(prob)
-            return @dsp_ccall($strfunc, Void, (Ptr{Void}, Cint), prob.p, convert(Cint, comm.val))
+        function $func(dsp::DspModel, comm)
+            return @dsp_ccall($strfunc, Void, (Ptr{Void}, Cint), dsp.p, convert(Cint, comm.val))
         end
     end
 end
 
-function solve(prob::DspModel, comm = nothing)
-    if comm == nothing
-        if prob.solve_type == :Dual
-            solveDd(prob);
-        elseif prob.solve_type == :Benders
-            solveBd(prob);
-        elseif prob.solve_type == :Extensive
-            solveDe(prob);
+function solve(dsp::DspModel)
+    check_problem(dsp)
+    if comm_size == 1
+        if dsp.solve_type == :Dual
+            solveDd(dsp);
+        elseif dsp.solve_type == :Benders
+            solveBd(dsp);
+        elseif dsp.solve_type == :Extensive
+            solveDe(dsp);
         end
-    elseif isdefined(:MPI) && MPI.Initialized()
-        if prob.solve_type == :Dual
-            if MPI.Comm_size(MPI.COMM_WORLD) > 1
-                solveDdMpi(prob, comm);
-            else
-                solveDd(prob);
-            end
-        elseif prob.solve_type == :Benders
-            if MPI.Comm_size(MPI.COMM_WORLD) > 1
-                solveBdMpi(prob, comm);
-            else
-                solveBd(prob);
-            end
-        elseif prob.solve_type == :Extensive
-            solveDe(prob);
+    elseif dsp.comm_size > 1
+        if dsp.solve_type == :Dual
+            solveDdMpi(dsp, dsp.comm);
+        elseif dsp.solve_type == :Benders
+            solveBdMpi(dsp, dsp.comm);
+        elseif dsp.solve_type == :Extensive
+            solveDe(dsp);
         end
     end
 end
@@ -275,35 +362,6 @@ end
 ###############################################################################
 # Get functions
 ###############################################################################
-
-function getProcIdxSet(numScens::Integer, dedicatedMaster::Bool)
-    mysize = 1;
-    myrank = 0;
-    if isdefined(:MPI) == true && MPI.Initialized() == true
-        comm = MPI.COMM_WORLD
-        mysize = MPI.Comm_size(comm)
-        myrank = MPI.Comm_rank(comm)
-    end
-    # Round-and-Robin
-    proc_idx_set = Int[];
-    # DSP is further parallelized with mysize > numScens.
-    modrank = myrank % numScens;
-    
-    if dedicatedMaster == true && mysize > 1
-        if myrank == 0
-            return proc_idx_set;
-        end
-        # exclude master
-        mysize -= 1;
-        modrank = (myrank-1) % numScens;
-    end
-    
-    for s = modrank:mysize:(numScens-1)
-        push!(proc_idx_set, s+1);
-    end
-    return proc_idx_set;
-end
-getProcIdxSet(numScens::Integer) = getProcIdxSet(numScens,false);
 
 function getDataFormat(model::JuMP.Model)
     # Get a column-wise sparse matrix
@@ -353,57 +411,49 @@ for (func,rtn) in [(:getNumScenarios, Cint),
                    (:getDualBound, Cdouble)]
     strfunc = string(func)
     @eval begin
-        function $func(prob::DspModel)
-            check_problem(prob)
-            return @dsp_ccall($strfunc, $rtn, (Ptr{Void},), prob.p)
+        function $func(dsp::DspModel)
+            check_problem(dsp)
+            return @dsp_ccall($strfunc, $rtn, (Ptr{Void},), dsp.p)
         end
     end
 end
 
-function getObjCoef(prob::DspModel)
-    check_problem(prob)
+function getObjCoef(dsp::DspModel)
+    check_problem(dsp)
     num = getTotalNumCols()
     obj = Array(Cdouble, num)
-    @dsp_ccall("getObjCoef", Void, (Ptr{Void}, Ptr{Cdouble}), prob.p, obj)
+    @dsp_ccall("getObjCoef", Void, (Ptr{Void}, Ptr{Cdouble}), dsp.p, obj)
     return obj
 end
 
-function getSolution(prob::DspModel, num::Integer)
+function getSolution(dsp::DspModel, num::Integer)
     sol = Array(Cdouble, num)
-    @dsp_ccall("getPrimalSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), prob.p, num, sol)
+    @dsp_ccall("getPrimalSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     return sol
 end
-getSolution(prob::DspModel) = getSolution(prob, getTotalNumCols(prob))
+getSolution(dsp::DspModel) = getSolution(dsp, getTotalNumCols(dsp))
 
 
-function getDualSolution(prob::DspModel, num::Integer)
+function getDualSolution(dsp::DspModel, num::Integer)
     sol = Array(Cdouble, num)
-    @dsp_ccall("getDualSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), prob.p, num, sol)
+    @dsp_ccall("getDualSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     return sol
 end
-getDualSolution(prob::DspModel) = getDualSolution(prob, getNumCouplingRows(prob))
+getDualSolution(dsp::DspModel) = getDualSolution(dsp, getNumCouplingRows(dsp))
 
 
 ###############################################################################
 # Set functions
 ###############################################################################
 
-function setSolverType(prob::DspModel, solver)
-    check_problem(prob)
+function setSolverType(dsp::DspModel, solver)
+    check_problem(dsp)
     solver_types = [:DualDecomp, :Benders, :ExtensiveForm]
     if solver in solver_types
-        prob.solver = solver
+        dsp.solver = solver
     else
         warn("Solver type $solver is invalid.")
     end
-end
-
-function setProcIdxSet(prob::DspModel, scenarios::Array{Int,1})
-    check_problem(prob)
-    num = convert(Cint, length(scenarios));
-    scenarios = scenarios - 1;
-    @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}), 
-        prob.p, "ARR_PROC_IDX", convert(Cint, num), convert(Vector{Cint}, scenarios))
 end
 
 end # end of module
