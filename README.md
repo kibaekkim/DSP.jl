@@ -41,7 +41,6 @@ getobjectivevalue(m)
 
 # Comment out this line if you want to run in serial
 MPI.Finalize()
-
 ```
 
 or, it can also read and solve model from SMPS files:

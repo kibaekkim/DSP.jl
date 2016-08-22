@@ -399,10 +399,8 @@ function getDataFormat(model::JuMP.Model)
 end
 
 for (func,rtn) in [(:getNumScenarios, Cint), 
-                   (:getTotalNumRows, Cint), 
                    (:getTotalNumCols, Cint), 
-                   (:getNumCouplingRows, Cint), 
-                   (:getStatus, Cint), 
+                   (:getSolutionStatus, Cint), 
                    (:getNumIterations, Cint), 
                    (:getNumNodes, Cint), 
                    (:getWallTime, Cdouble), 
@@ -432,14 +430,12 @@ function getSolution(dsp::DspModel, num::Integer)
 end
 getSolution(dsp::DspModel) = getSolution(dsp, getTotalNumCols(dsp))
 
-
 function getDualSolution(dsp::DspModel, num::Integer)
     sol = Array(Cdouble, num)
     @dsp_ccall("getDualSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     return sol
 end
 getDualSolution(dsp::DspModel) = getDualSolution(dsp, getNumCouplingRows(dsp))
-
 
 ###############################################################################
 # Set functions
