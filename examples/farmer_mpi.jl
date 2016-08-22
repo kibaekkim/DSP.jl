@@ -1,7 +1,11 @@
 # Kibaek Kim - ANL MCS 2016
 # Farmer example from Birge and Louveaux book.
+#
+# To use MPI, add MPI.Init() and MPI.Finalize() around the scritp lines.
 
-using JuMP, Dsp
+using MPI, JuMP, Dsp
+
+MPI.Init()
 
 NS = 3;                        # number of scenarios
 probability = [1/3, 1/3, 1/3]; # probability
@@ -38,3 +42,5 @@ for s in 1:NS
     @constraint(blk, const_minreq_beets, Yield[s,3] * x[3] - w[3] - w[4] >= Minreq[3])
     @constraint(blk, const_aux, w[3] <= 6000)
 end
+
+MPI.Finalize()

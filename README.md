@@ -13,7 +13,10 @@ Pkg.clone("https://github.com/kibaekkim/Dsp.jl")
 DSP can read and solve model from JuMP:
 
 ```julia
-using Dsp, JuMP
+using JuMP, Dsp, MPI
+
+# Comment out this line if you want to run in serial
+MPI.Init()
 
 xi = [[7,7] [11,11] [13,13]]
 
@@ -35,6 +38,10 @@ solve_types = [:Dual, :Benders, :Extensive]
 solve(m, solve_type = solve_types[1], param = "myparam.txt")
 
 getobjectivevalue(m)
+
+# Comment out this line if you want to run in serial
+MPI.Finalize()
+
 ```
 
 or, it can also read and solve model from SMPS files:
