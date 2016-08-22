@@ -28,14 +28,18 @@ model = DspModel()
 
 # This is for the master problem.
 function Model(;nblocks::Integer = 0)
-    # set block ids
-    DspCInterface.setBlockIds(Dsp.model, nblocks)
     # construct model
     m = JuMP.Model()
-    # set extension
-    m.ext[:DspBlocks] = BlockStructure(nothing, Dict{Int,JuMP.Model}(), Dict{Int,Float64}())
-    # set solvehook
-    JuMP.setsolvehook(m, Dsp.dsp_solve)
+    if nblocks > 0
+        # set block ids
+        DspCInterface.setBlockIds(Dsp.model, nblocks)
+        # set extension
+        m.ext[:DspBlocks] = BlockStructure(nothing, Dict{Int,JuMP.Model}(), Dict{Int,Float64}())
+        # set solvehook
+        JuMP.setsolvehook(m, Dsp.dsp_solve)
+    else
+        warn("nblocks is not specified or non-positive value. DSP solver will be disabled.")
+    end
     # return model
     m
 end
@@ -46,9 +50,13 @@ function Model(;parent::JuMP.Model = nothing, id::Integer = 0, weight::Float64 =
     m = JuMP.Model()
     # set extension
     m.ext[:DspBlocks] = BlockStructure(nothing, Dict{Int,JuMP.Model}(), Dict{Int,Float64}())
-    # set block
-    parent.ext[:DspBlocks].children = m
-    parent.ext[:DspBlocks].weight   = weight
+    if parent == nothing
+        error("Parent block is not specified.")
+    else
+        # set block
+        setindex!(parent.ext[:DspBlocks].children, m, id)
+        setindex!(parent.ext[:DspBlocks].weight, weight, id)
+    end
     # return model
     m
 end
