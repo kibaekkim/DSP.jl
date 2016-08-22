@@ -8,7 +8,7 @@ include("block.jl")
 using Dsp.DspCInterface
 
 import JuMP
-export Model,
+export
     readSmps, 
     getblocksolution, 
     optimize, 
@@ -27,36 +27,31 @@ model = DspModel()
 ###############################################################################
 
 # This is for the master problem.
-function Model(;nblocks::Integer = 0)
+function JuMP.Model(nblocks::Integer)
     # construct model
     m = JuMP.Model()
-    if nblocks > 0
-        # set block ids
-        DspCInterface.setBlockIds(Dsp.model, nblocks)
-        # set extension
-        m.ext[:DspBlocks] = BlockStructure(nothing, Dict{Int,JuMP.Model}(), Dict{Int,Float64}())
-        # set solvehook
-        JuMP.setsolvehook(m, Dsp.dsp_solve)
-    else
-        warn("nblocks is not specified or non-positive value. DSP solver will be disabled.")
-    end
+    # free DspModel
+    DspCInterface.freeModel(Dsp.model)
+    # set block ids
+    DspCInterface.setBlockIds(Dsp.model, nblocks)
+    # set extension
+    m.ext[:DspBlocks] = BlockStructure(nothing, Dict{Int,JuMP.Model}(), Dict{Int,Float64}())
+    # set solvehook
+    JuMP.setsolvehook(m, Dsp.dsp_solve)
     # return model
     m
 end
 
 # This is for the subproblems.
-function Model(;parent::JuMP.Model = nothing, id::Integer = 0, weight::Float64 = 1.0)
+function JuMP.Model(parent::JuMP.Model, id::Integer, weight::Float64)
     # construct model
     m = JuMP.Model()
     # set extension
     m.ext[:DspBlocks] = BlockStructure(nothing, Dict{Int,JuMP.Model}(), Dict{Int,Float64}())
-    if parent == nothing
-        error("Parent block is not specified.")
-    else
-        # set block
-        setindex!(parent.ext[:DspBlocks].children, m, id)
-        setindex!(parent.ext[:DspBlocks].weight, weight, id)
-    end
+    # set block
+    m.ext[:DspBlocks].parent = parent
+    setindex!(parent.ext[:DspBlocks].children, m, id)
+    setindex!(parent.ext[:DspBlocks].weight, weight, id)
     # return model
     m
 end
@@ -67,10 +62,6 @@ end
 
 # This function is hooked by JuMP (see block.jl)
 function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
-
-    # free DspModel
-    DspCInterface.freeModel(Dsp.model)
-
     # parse options
     for (optname, optval) in options
         if optname == :param
@@ -231,27 +222,30 @@ function getDspSolution(m::JuMP.Model = nothing)
         Dsp.model.rowVal = DspCInterface.getDualSolution(Dsp.model)
     else
         Dsp.model.colVal = DspCInterface.getSolution(Dsp.model)
-    end
-
-    if m != nothing
-        m.objVal = Dsp.model.primVal
-        # parse solution to each block
-        n_start = 1
-        n_end = m.numCols
-        m.colVal = Dsp.model.colVal[n_start:n_end]
-        n_start += m.numCols
-        if haskey(m.ext, :DspBlocks) == true
-            numBlockCols = DspCInterface.getNumBlockCols(Dsp.model, m)
-            blocks = m.ext[:DspBlocks].children
-            for b in numBlockCols
-                n_end += b.second
-                if haskey(blocks, b.first)
-                    blocks[b.first].colVal = Dsp.model.colVal[n_start:n_end]
+        if m != nothing
+            # parse solution to each block
+            n_start = 1
+            n_end = m.numCols
+            m.colVal = Dsp.model.colVal[n_start:n_end]
+            n_start += m.numCols
+            if haskey(m.ext, :DspBlocks) == true
+                numBlockCols = DspCInterface.getNumBlockCols(Dsp.model, m)
+                blocks = m.ext[:DspBlocks].children
+                for i in 1:Dsp.model.nblocks
+                    n_end += numBlockCols[i]
+                    if haskey(blocks, i)
+                        # @show b
+                        # @show n_start
+                        # @show n_end
+                        blocks[i].colVal = Dsp.model.colVal[n_start:n_end]
+                    end
+                    n_start += numBlockCols[i]
                 end
-                n_end += b.second
             end
         end
-
+    end
+    if m != nothing
+        m.objVal = Dsp.model.primVal
         # maximization?
         if m.objSense == :Max
             m.objVal *= -1

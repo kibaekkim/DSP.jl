@@ -158,11 +158,16 @@ function setBlockIds(dsp::DspModel, nblocks::Integer)
     # set MPI settings
     if isdefined(:MPI) && MPI.Initialized()
         dsp.comm = MPI.COMM_WORLD
-        dsp.comm_size = MPI.Comm_size(comm)
-        dsp.comm_rank = MPI.Comm_rank(comm)
+        dsp.comm_size = MPI.Comm_size(dsp.comm)
+        dsp.comm_rank = MPI.Comm_rank(dsp.comm)
     end
+    #@show dsp.nblocks
+    #@show dsp.comm
+    #@show dsp.comm_size
+    #@show dsp.comm_rank
     # get block ids with MPI settings
     dsp.block_ids = getBlockIds(dsp)
+    #@show dsp.block_ids
     # send the block ids to Dsp
     @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}), 
         dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids - 1))
@@ -201,21 +206,24 @@ function getNumBlockCols(dsp::DspModel, m::JuMP.Model)
     blocks = m.ext[:DspBlocks].children
     # get number of block columns
     numBlockCols = Dict{Int,Int}()
-    if dps.comm_size > 1
-        block_ids = MPI.Allgatherv(keys(blocks), length(blocks))
-        ncols_to_send = [blocks[i].numCols for i in keys(blocks)]
-        ncols = MPI.Allgatherv(ncols_to_send, length(blocks))
-        @show block_ids
-        @show ncols
+    if dsp.comm_size > 1
+        num_proc_blocks = convert(Vector{Cint}, MPI.Allgather(length(blocks), dsp.comm))
+        #@show num_proc_blocks
+        #@show collect(keys(blocks))
+        block_ids = MPI.Allgatherv(collect(keys(blocks)), num_proc_blocks, dsp.comm)
+        #@show block_ids
+        ncols_to_send = Int[blocks[i].numCols for i in keys(blocks)]
+        #@show ncols_to_send
+        ncols = MPI.Allgatherv(ncols_to_send, num_proc_blocks, dsp.comm)
+        #@show ncols
         for i in 1:dsp.nblocks
-            setindex!(numBlockCols, ncols[i], ids[i])
+            setindex!(numBlockCols, ncols[i], block_ids[i])
         end
     else
         for b in blocks
             setindex!(numBlockCols, b.second.numCols, b.first)
         end
     end
-    @show numBlockCols
     return numBlockCols
 end
 
@@ -236,15 +244,6 @@ function loadProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
     check_problem(dsp)
     if haskey(model.ext, :DspBlocks)
         loadStochasticProblem(dsp, model, dedicatedMaster)
-
-        # children = model.ext[:DspBlocks].children
-        # ids = MPI.Allgatherv(keys(children), length(children))
-        # ncols_to_send = [children[i].numCols for i in keys(children)]
-        # ncols_to_recv = MPI.Allgatherv(ncols_to_send, length(children))
-        # ncols = zeros(Int64, prob.nblocks)
-        # for i in 1:prob.nblocks
-        #     ncols[ids[i]] = ncols_to_recv[i]
-        # end
     else
         warn("No block is defined.")
         loadDeterministicProblem(dsp, model)
@@ -257,27 +256,27 @@ function loadStochasticProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster
     # get DspBlocks
     blocks = model.ext[:DspBlocks]
     
-    nscen  = convert(Cint, dsp.nblocks)
-    ncols1 = convert(Cint, model.numCols)
-    nrows1 = convert(Cint, length(model.linconstr))
+    nscen  = dsp.nblocks
+    ncols1 = model.numCols
+    nrows1 = length(model.linconstr)
     ncols2 = 0
     nrows2 = 0
     for s in values(blocks.children)
-        ncols2 = convert(Cint, s.numCols)
-        nrows2 = convert(Cint, length(s.linconstr))
+        ncols2 = s.numCols
+        nrows2 = length(s.linconstr)
         break
     end
     
     # set scenario indices for each MPI processor
-    if comm_size > 1
-        ncols2 = MPI.Reduce(ncols2, MPI.MAX, 0, dsp.comm)
-        nrows2 = MPI.Reduce(nrows2, MPI.MAX, 0, dsp.comm)
+    if dsp.comm_size > 1
+        ncols2 = MPI.allreduce([ncols2], MPI.MAX, dsp.comm)[1]
+        nrows2 = MPI.allreduce([nrows2], MPI.MAX, dsp.comm)[1]
     end
     
-    @dsp_ccall("setNumberOfScenarios", Void, (Ptr{Void}, Cint), dsp.p, nscen)
+    @dsp_ccall("setNumberOfScenarios", Void, (Ptr{Void}, Cint), dsp.p, convert(Cint, nscen))
     @dsp_ccall("setDimensions", Void, 
         (Ptr{Void}, Cint, Cint, Cint, Cint), 
-        dsp.p, ncols1, nrows1, ncols2, nrows2)
+        dsp.p, convert(Cint, ncols1), convert(Cint, nrows1), convert(Cint, ncols2), convert(Cint, nrows2))
     
     # get problem data
     start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
@@ -340,7 +339,7 @@ end
 
 function solve(dsp::DspModel)
     check_problem(dsp)
-    if comm_size == 1
+    if dsp.comm_size == 1
         if dsp.solve_type == :Dual
             solveDd(dsp);
         elseif dsp.solve_type == :Benders
