@@ -216,7 +216,7 @@ function parseStatusCode(statcode::Integer)
     stat
 end
 
-function getDspSolution(m::JuMP.Model == nothing)
+function getDspSolution(m::JuMP.Model = nothing)
     Dsp.model.primVal = DspCInterface.getPrimalBound(Dsp.model)
     Dsp.model.dualVal = DspCInterface.getDualBound(Dsp.model)
 
