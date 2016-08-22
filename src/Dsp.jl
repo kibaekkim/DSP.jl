@@ -8,7 +8,8 @@ include("block.jl")
 using Dsp.DspCInterface
 
 import JuMP
-export readSmps, 
+export Model,
+    readSmps, 
     getblocksolution, 
     optimize, 
     getprimobjval, 
@@ -26,7 +27,7 @@ model = DspModel()
 ###############################################################################
 
 # This is for the master problem.
-function JuMP.Model(nblocks::Integer)
+function Model(;nblocks::Integer = 0)
     # set block ids
     DspCInterface.setBlockIds(Dsp.model, nblocks)
     # construct model
@@ -40,9 +41,7 @@ function JuMP.Model(nblocks::Integer)
 end
 
 # This is for the subproblems.
-function JuMP.Model(parent::JuMP.Model, id::Integer, weight::Float64 = 1.0)
-    # set number of blocks
-    Dsp.model.nblocks = nblocks
+function Model(;parent::JuMP.Model = nothing, id::Integer = 0, weight::Float64 = 1.0)
     # construct model
     m = JuMP.Model()
     # set extension
