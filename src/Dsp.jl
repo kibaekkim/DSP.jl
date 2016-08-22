@@ -59,7 +59,7 @@ end
 ###############################################################################
 
 # This function is hooked by JuMP (see block.jl)
-function dsp_solve(m::JuMP.Model; suppress_warnings = false, comm = nothing, options...)
+function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
 
     # free DspModel
     DspCInterface.freeModel(Dsp.model)
@@ -83,7 +83,7 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, comm = nothing, opt
     DspCInterface.loadProblem(Dsp.model, m)
 
     # solve
-    DspCInterface.solve(Dsp.model, comm)
+    DspCInterface.solve(Dsp.model)
 
     # solution status
     statcode = DspCInterface.getStatus(Dsp.model)
@@ -111,7 +111,7 @@ end
 # Input/output files
 ###############################################################################
 
-function optimize(;suppress_warnings = false, comm = nothing, options...)
+function optimize(;suppress_warnings = false, options...)
 
     # parse options
     for (optname, optval) in options
@@ -129,7 +129,7 @@ function optimize(;suppress_warnings = false, comm = nothing, options...)
     end
 
     # solve
-    DspCInterface.solve(Dsp.model, comm)
+    DspCInterface.solve(Dsp.model)
 
     # solution status
     statcode = DspCInterface.getStatus(Dsp.model)
