@@ -35,6 +35,6 @@ for s in 1:NS
     @variable(blk, w[k=SELL] >= 0)
     @objective(blk, Min, sum{Purchase[j] * y[j], j=PURCH} - sum{Sell[k] * w[k], k=SELL})
     @constraint(blk, const_minreq[j=PURCH], Yield[s,j] * x[j,s] + y[j] - w[j] >= Minreq[j])
-    @constraint(blk, const_minreq_beets, Yield[s,3] * x[3] - w[3] - w[4] >= Minreq[3])
+    @constraint(blk, const_minreq_beets, Yield[s,3] * x[3,s] - w[3] - w[4] >= Minreq[3])
     @constraint(blk, const_aux, w[3] <= 6000)
 end
