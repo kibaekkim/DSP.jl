@@ -240,18 +240,21 @@ function readSmps(dsp::DspModel, filename::AbstractString)
     setBlockIds(dsp, getNumScenarios(dsp))
 end
 
-function loadProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
+function loadProblem(dsp::DspModel, model::JuMP.Model)
     check_problem(dsp)
     if haskey(model.ext, :DspBlocks)
-        loadStochasticProblem(dsp, model, dedicatedMaster)
+        if dsp.solve_type in [:Dual, :Benders, :Extensive]
+            loadStochasticProblem(dsp, model)
+        elseif dsp.solve_type in [:DW]
+            loadStructuredProblem(dsp, model)
+        end
     else
         warn("No block is defined.")
         loadDeterministicProblem(dsp, model)
     end
 end
-loadProblem(dsp::DspModel, model::JuMP.Model) = loadProblem(dsp, model, true);
 
-function loadStochasticProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
+function loadStochasticProblem(dsp::DspModel, model::JuMP.Model)
     
     # get DspBlocks
     blocks = model.ext[:DspBlocks]
@@ -297,7 +300,65 @@ function loadStochasticProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster
                 Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}), 
             dsp.p, id-1, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
     end
+end
+
+function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
+
+    ncols_master = model.numCols
+    nrows_master = length(model.linconstr)
+
+    # TODO: do something for MPI
+
+    # set number of blocks
+    @dsp_ccall("setNumberOfBlocks", Void, (Ptr{Void}, Cint), dsp.p, convert(Cint, dsp.nblocks))
     
+    # load master
+    start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
+    @dsp_ccall("loadMasterProblem", Void, (
+        Ptr{Void},    # env
+        Cint,         # ncols
+        Cint,         # nrows
+        Ptr{Cint},    # start
+        Ptr{Cint},    # index
+        Ptr{Cdouble}, # value
+        Ptr{Cdouble}, # clbd
+        Ptr{Cdouble}, # cubd
+        Ptr{UInt8},   # ctype
+        Ptr{Cdouble}, # obj
+        Ptr{Cdouble}, # rlbd
+        Ptr{Cdouble}  # rubd
+        ),
+        dsp.p, ncols_master, nrows_master,
+        start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
+
+    # going over blocks
+    blocks = model.ext[:DspBlocks]
+    for id in dsp.block_ids
+        child = blocks.children[id]
+        weight = blocks.weight[id]
+        ncols_block = child.numCols # number of columns not coupled with the master
+        nrows_block = length(child.linconstr)
+        # load blocks
+        start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(child)
+        @dsp_ccall("loadBlockProblem", Void, (
+            Ptr{Void},    # env
+            Cint,         # id
+            Cdouble,      # weight
+            Cint,         # ncols
+            Cint,         # nrows
+            Ptr{Cint},    # start
+            Ptr{Cint},    # index
+            Ptr{Cdouble}, # value
+            Ptr{Cdouble}, # clbd
+            Ptr{Cdouble}, # cubd
+            Ptr{UInt8},   # ctype
+            Ptr{Cdouble}, # obj
+            Ptr{Cdouble}, # rlbd
+            Ptr{Cdouble}  # rubd
+            ),
+            dsp.p, id - 1, weight, ncols_block, nrows_block,
+            start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
+    end
 end
 
 function loadDeterministicProblem(dsp::DspModel, model::JuMP.Model)

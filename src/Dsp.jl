@@ -62,20 +62,8 @@ end
 
 # This function is hooked by JuMP (see block.jl)
 function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
-    # parse options
-    for (optname, optval) in options
-        if optname == :param
-            DspCInterface.readParamFile(Dsp.model, optval)
-        elseif optname == :solve_type
-            if optval in [:Dual, :Benders, :Extensive]
-                Dsp.model.solve_type = optval
-            else
-                warn("solve_type $optval is not available.")
-            end
-        else
-            warn("Options $optname is not available.")
-        end
-    end
+
+    setoptions(options)
 
     # load JuMP model to Dsp
     DspCInterface.loadProblem(Dsp.model, m)
@@ -106,18 +94,12 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
     stat
 end
 
-###############################################################################
-# Input/output files
-###############################################################################
-
-function optimize(;suppress_warnings = false, options...)
-
-    # parse options
+function setoptions(options)
     for (optname, optval) in options
         if optname == :param
             DspCInterface.readParamFile(Dsp.model, optval)
         elseif optname == :solve_type
-            if optval in [:Dual, :Benders, :Extensive]
+            if optval in [:Dual, :Benders, :Extensive, :DW]
                 Dsp.model.solve_type = optval
             else
                 warn("solve_type $optval is not available.")
@@ -126,6 +108,15 @@ function optimize(;suppress_warnings = false, options...)
             warn("Options $optname is not available.")
         end
     end
+end
+
+###############################################################################
+# Input/output files
+###############################################################################
+
+function optimize(;suppress_warnings = false, options...)
+
+    setoptions(options)
 
     # solve
     DspCInterface.solve(Dsp.model)
