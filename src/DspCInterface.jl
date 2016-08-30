@@ -247,10 +247,10 @@ function loadProblem(dsp::DspModel, model::JuMP.Model)
             loadStochasticProblem(dsp, model)
         elseif dsp.solve_type in [:DW]
             loadStructuredProblem(dsp, model)
+            # loadDeterministicProblem(dsp, model)
         end
     else
-        warn("No block is defined.")
-        loadDeterministicProblem(dsp, model)
+        error("No block is defined.")
     end
 end
 
@@ -314,10 +314,12 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
     
     # load master
     start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
-    @dsp_ccall("loadMasterProblem", Void, (
+    @dsp_ccall("loadBlockProblem", Void, (
         Ptr{Void},    # env
+        Cint,         # id
         Cint,         # ncols
         Cint,         # nrows
+        Cint,         # numels
         Ptr{Cint},    # start
         Ptr{Cint},    # index
         Ptr{Cdouble}, # value
@@ -328,7 +330,7 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
         Ptr{Cdouble}, # rlbd
         Ptr{Cdouble}  # rubd
         ),
-        dsp.p, ncols_master, nrows_master,
+        dsp.p, 0, ncols_master, nrows_master, start[nrows_master],
         start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
 
     # going over blocks
@@ -343,9 +345,9 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
         @dsp_ccall("loadBlockProblem", Void, (
             Ptr{Void},    # env
             Cint,         # id
-            Cdouble,      # weight
             Cint,         # ncols
             Cint,         # nrows
+            Cint,         # numels
             Ptr{Cint},    # start
             Ptr{Cint},    # index
             Ptr{Cdouble}, # value
@@ -356,7 +358,7 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
             Ptr{Cdouble}, # rlbd
             Ptr{Cdouble}  # rubd
             ),
-            dsp.p, id - 1, weight, ncols_block, nrows_block,
+            dsp.p, id, ncols_block, nrows_block, start[nrows_block], 
             start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
     end
 end
@@ -380,7 +382,8 @@ end
 for func in [:freeSolver, 
              :solveDe, 
              :solveBd, 
-             :solveDd]
+             :solveDd, 
+             :solveDw]
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel)
@@ -407,6 +410,8 @@ function solve(dsp::DspModel)
             solveBd(dsp);
         elseif dsp.solve_type == :Extensive
             solveDe(dsp);
+        elseif dsp.solve_type == :DW
+            solveDw(dsp);
         end
     elseif dsp.comm_size > 1
         if dsp.solve_type == :Dual
