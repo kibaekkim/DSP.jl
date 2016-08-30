@@ -38,3 +38,5 @@ for s in 1:NS
     @constraint(blk, const_minreq_beets, Yield[s,3] * x[3,s] - w[3] - w[4] >= Minreq[3])
     @constraint(blk, const_aux, w[3] <= 6000)
 end
+
+solve(m)
