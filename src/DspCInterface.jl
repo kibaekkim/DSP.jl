@@ -415,6 +415,12 @@ for (func,rtn) in [(:getNumScenarios, Cint),
     end
 end
 getSolutionStatus(dsp::DspModel) = getStatus(dsp)
+function getNumRows(dsp::DspModel, num::Integer)
+    @dsp_ccall("getNumRows", Cint, (Ptr{Void}, Cint), dsp.p, num)
+end
+function getNumCols(dsp::DspModel, num::Integer)
+    @dsp_ccall("getNumCols", Cint, (Ptr{Void}, Cint), dsp.p, num)
+end
 
 function getObjCoef(dsp::DspModel)
     check_problem(dsp)
