@@ -400,6 +400,7 @@ end
 
 for (func,rtn) in [(:getNumScenarios, Cint), 
                    (:getTotalNumCols, Cint), 
+                   (:getTotalNumRows, Cint),
                    (:getStatus, Cint), 
                    (:getNumIterations, Cint), 
                    (:getNumNodes, Cint), 
