@@ -405,7 +405,8 @@ for (func,rtn) in [(:getNumScenarios, Cint),
                    (:getNumNodes, Cint), 
                    (:getWallTime, Cdouble), 
                    (:getPrimalBound, Cdouble), 
-                   (:getDualBound, Cdouble)]
+                   (:getDualBound, Cdouble),
+                   (:getNumCouplingRows, Cint)]
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel)
