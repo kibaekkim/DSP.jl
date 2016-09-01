@@ -400,7 +400,7 @@ end
 
 for (func,rtn) in [(:getNumScenarios, Cint), 
                    (:getTotalNumCols, Cint), 
-                   (:getSolutionStatus, Cint), 
+                   (:getStatus, Cint), 
                    (:getNumIterations, Cint), 
                    (:getNumNodes, Cint), 
                    (:getWallTime, Cdouble), 
@@ -414,6 +414,7 @@ for (func,rtn) in [(:getNumScenarios, Cint),
         end
     end
 end
+getSolutionStatus(dsp::DspModel) = getStatus(dsp)
 
 function getObjCoef(dsp::DspModel)
     check_problem(dsp)
