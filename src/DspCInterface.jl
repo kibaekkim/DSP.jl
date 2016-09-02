@@ -332,7 +332,7 @@ for func in [:solveBdMpi, :solveDdMpi]
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel, comm)
-            return @dsp_ccall($strfunc, Void, (Ptr{Void}, Cint), dsp.p, convert(Cint, comm.val))
+            return @dsp_ccall($strfunc, Void, (Ptr{Void}, MPI.CComm), dsp.p, convert(MPI.CComm, comm))
         end
     end
 end
