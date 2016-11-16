@@ -306,14 +306,13 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
 
     ncols_master = model.numCols
     nrows_master = length(model.linconstr)
+    # @show ncols_master
+    # @show nrows_master
 
     # TODO: do something for MPI
-
-    # set number of blocks
-    @dsp_ccall("setNumberOfBlocks", Void, (Ptr{Void}, Cint), dsp.p, convert(Cint, dsp.nblocks))
     
     # load master
-    start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
+    start, index, value, clbd_master, cubd_master, ctype_master, obj_master, rlbd, rubd = getDataFormat(model)
     @dsp_ccall("loadBlockProblem", Void, (
         Ptr{Void},    # env
         Cint,         # id
@@ -330,8 +329,8 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
         Ptr{Cdouble}, # rlbd
         Ptr{Cdouble}  # rubd
         ),
-        dsp.p, 0, ncols_master, nrows_master, start[nrows_master],
-        start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
+        dsp.p, 0, ncols_master, nrows_master, start[nrows_master+1],
+        start, index, value, clbd_master, cubd_master, ctype_master, obj_master, rlbd, rubd)
 
     # going over blocks
     blocks = model.ext[:DspBlocks]
@@ -340,8 +339,13 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
         weight = blocks.weight[id]
         ncols_block = child.numCols # number of columns not coupled with the master
         nrows_block = length(child.linconstr)
+        # @show ncols_block
+        # @show nrows_block
         # load blocks
         start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(child)
+        # @show start
+        # @show index
+        # @show value
         @dsp_ccall("loadBlockProblem", Void, (
             Ptr{Void},    # env
             Cint,         # id
@@ -358,9 +362,13 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
             Ptr{Cdouble}, # rlbd
             Ptr{Cdouble}  # rubd
             ),
-            dsp.p, id, ncols_block, nrows_block, start[nrows_block], 
-            start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
+            dsp.p, id, ncols_master + ncols_block, nrows_block, start[nrows_block+1], 
+            start, index, value, [clbd_master;clbd], [cubd_master;cubd], [ctype_master;ctype], 
+            [obj_master;obj], rlbd, rubd)
     end
+
+    # Finalize loading blocks
+    @dsp_ccall("updateBlocks", Void, (Ptr{Void},), dsp.p)
 end
 
 function loadDeterministicProblem(dsp::DspModel, model::JuMP.Model)
@@ -465,8 +473,9 @@ function getDataFormat(model::JuMP.Model)
 end
 
 for (func,rtn) in [(:getNumScenarios, Cint), 
+                   (:getTotalNumRows, Cint), 
                    (:getTotalNumCols, Cint), 
-                   (:getSolutionStatus, Cint), 
+                   (:getStatus, Cint), 
                    (:getNumIterations, Cint), 
                    (:getNumNodes, Cint), 
                    (:getWallTime, Cdouble), 
@@ -487,6 +496,10 @@ function getObjCoef(dsp::DspModel)
     obj = Array(Cdouble, num)
     @dsp_ccall("getObjCoef", Void, (Ptr{Void}, Ptr{Cdouble}), dsp.p, obj)
     return obj
+end
+
+function getNumRows(dsp::DspModel, stage::Integer)
+    return @dsp_ccall("getNumRows", Void, (Ptr{Void}, Cint), dsp.p, stage)
 end
 
 function getSolution(dsp::DspModel, num::Integer)
