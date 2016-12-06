@@ -155,7 +155,7 @@ end
 # Block IDs
 ###############################################################################
 
-function setBlockIds(dsp::DspModel, nblocks::Integer)
+function setBlockIds(dsp::DspModel, nblocks::Integer, master_has_subblocks::Bool)
     check_problem(dsp)
     # set number of blocks
     dsp.nblocks = nblocks
@@ -170,14 +170,15 @@ function setBlockIds(dsp::DspModel, nblocks::Integer)
     #@show dsp.comm_size
     #@show dsp.comm_rank
     # get block ids with MPI settings
-    dsp.block_ids = getBlockIds(dsp)
+    dsp.block_ids = getBlockIds(dsp, master_has_subblocks)
     #@show dsp.block_ids
     # send the block ids to Dsp
     @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}), 
         dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids - 1))
 end
+setBlockIds(dsp, nblocks) = setBlockIds(dsp, nblocks, false)
 
-function getBlockIds(dsp::DspModel)
+function getBlockIds(dsp::DspModel, master_has_subblocks::Bool)
     check_problem(dsp)
     # processor info
     mysize = dsp.comm_size
@@ -188,21 +189,29 @@ function getBlockIds(dsp::DspModel)
     modrank = myrank % dsp.nblocks
     # If we have more than one processor, 
     # do not assign a sub-block to the master.
-    if mysize > 1
-        if myrank == 0
-            return proc_idx_set
+    if master_has_subblocks
+        # assign sub-blocks in round-robin fashion
+        for s = modrank:mysize:(dsp.nblocks-1)
+            push!(proc_idx_set, s+1)
         end
-        # exclude master
-        mysize -= 1;
-        modrank = (myrank-1) % dsp.nblocks
-    end
-    # assign sub-blocks in round-robin fashion
-    for s = modrank:mysize:(dsp.nblocks-1)
-        push!(proc_idx_set, s+1)
+    else
+        if mysize > 1
+            if myrank == 0
+                return proc_idx_set
+            end
+            # exclude master
+            mysize -= 1;
+            modrank = (myrank-1) % dsp.nblocks
+        end
+        # assign sub-blocks in round-robin fashion
+        for s = modrank:mysize:(dsp.nblocks-1)
+            push!(proc_idx_set, s+1)
+        end
     end
     # return assigned block ids
     return proc_idx_set
 end
+getBlockIds(dsp) = getBlockIds(dsp, false)
 
 function getNumBlockCols(dsp::DspModel, m::JuMP.Model)
     check_problem(dsp)
@@ -343,6 +352,7 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
         weight = blocks.weight[id]
         ncols_block = child.numCols # number of columns not coupled with the master
         nrows_block = length(child.linconstr)
+        # @show id
         # @show ncols_block
         # @show nrows_block
         # load blocks
@@ -404,7 +414,7 @@ for func in [:freeSolver,
     end
 end
 
-for func in [:solveBdMpi, :solveDdMpi]
+for func in [:solveBdMpi, :solveDdMpi, :solveDwMpi]
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel, comm)
@@ -430,6 +440,8 @@ function solve(dsp::DspModel)
             solveDdMpi(dsp, dsp.comm);
         elseif dsp.solve_type == :Benders
             solveBdMpi(dsp, dsp.comm);
+        elseif dsp.solve_type == :DW
+            solveDwMpi(dsp, dsp.comm);
         elseif dsp.solve_type == :Extensive
             solveDe(dsp);
         end
