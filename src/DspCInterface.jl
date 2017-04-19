@@ -388,7 +388,8 @@ function getDataFormat(model::JuMP.Model)
     ctype = convert(Vector{UInt8}, ctype)
     
     # objective coefficients
-    obj, rlbd, rubd = JuMP.prepProblemBounds(model)
+    obj = JuMP.prepAffObjective(model)
+    rlbd, rubd = JuMP.prepConstrBounds(model)
 
     # set objective sense
     if model.objSense == :Max
