@@ -13,11 +13,15 @@ export DspModel
 ###############################################################################
 
 macro dsp_ccall(func, args...)
-    @unix_only return quote
-        ccall(($func, "libDsp"), $(args...))
+    @static if is_unix() 
+        return quote
+            ccall(($func, "libDsp"), $(args...))
+        end
     end
-    @windows_only return quote
-        ccall(($func, "libDsp"), stdcall, $(args...))
+    @static if is_windows() 
+        return quote
+            ccall(($func, "libDsp"), stdcall, $(args...))
+        end
     end
 end
 
