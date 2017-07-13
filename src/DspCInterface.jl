@@ -13,15 +13,15 @@ export DspModel
 ###############################################################################
 
 macro dsp_ccall(func, args...)
-    @static if is_unix() 
-        return quote
+    @static if is_unix()
+        return esc(quote
             ccall(($func, "libDsp"), $(args...))
-        end
+        end)
     end
-    @static if is_windows() 
-        return quote
+    @static if is_windows()
+        return esc(quote
             ccall(($func, "libDsp"), stdcall, $(args...))
-        end
+        end)
     end
 end
 
@@ -173,7 +173,7 @@ function setBlockIds(dsp::DspModel, nblocks::Integer)
     dsp.block_ids = getBlockIds(dsp)
     #@show dsp.block_ids
     # send the block ids to Dsp
-    @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}), 
+    @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}),
         dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids - 1))
 end
 
@@ -186,7 +186,7 @@ function getBlockIds(dsp::DspModel)
     proc_idx_set = Int[]
     # DSP is further parallelized with mysize > dsp.nblocks.
     modrank = myrank % dsp.nblocks
-    # If we have more than one processor, 
+    # If we have more than one processor,
     # do not assign a sub-block to the master.
     if mysize > 1
         if myrank == 0
@@ -256,10 +256,10 @@ end
 loadProblem(dsp::DspModel, model::JuMP.Model) = loadProblem(dsp, model, true);
 
 function loadStochasticProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
-    
+
     # get DspBlocks
     blocks = model.ext[:DspBlocks]
-    
+
     nscen  = dsp.nblocks
     ncols1 = model.numCols
     nrows1 = length(model.linconstr)
@@ -270,23 +270,23 @@ function loadStochasticProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster
         nrows2 = length(s.linconstr)
         break
     end
-    
+
     # set scenario indices for each MPI processor
     if dsp.comm_size > 1
         ncols2 = MPI.allreduce([ncols2], MPI.MAX, dsp.comm)[1]
         nrows2 = MPI.allreduce([nrows2], MPI.MAX, dsp.comm)[1]
     end
-    
+
     @dsp_ccall("setNumberOfScenarios", Void, (Ptr{Void}, Cint), dsp.p, convert(Cint, nscen))
-    @dsp_ccall("setDimensions", Void, 
-        (Ptr{Void}, Cint, Cint, Cint, Cint), 
+    @dsp_ccall("setDimensions", Void,
+        (Ptr{Void}, Cint, Cint, Cint, Cint),
         dsp.p, convert(Cint, ncols1), convert(Cint, nrows1), convert(Cint, ncols2), convert(Cint, nrows2))
-    
+
     # get problem data
     start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
-    
-    @dsp_ccall("loadFirstStage", Void, 
-        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, 
+
+    @dsp_ccall("loadFirstStage", Void,
+        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
             Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
 
@@ -296,12 +296,12 @@ function loadStochasticProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster
         probability = blocks.weight[id]
         # get model data
         start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(blk)
-        @dsp_ccall("loadSecondStage", Void, 
-            (Ptr{Void}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, 
-                Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}), 
+        @dsp_ccall("loadSecondStage", Void,
+            (Ptr{Void}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
+                Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, id-1, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
     end
-    
+
 end
 
 function loadDeterministicProblem(dsp::DspModel, model::JuMP.Model)
@@ -309,8 +309,8 @@ function loadDeterministicProblem(dsp::DspModel, model::JuMP.Model)
     nrows = convert(Cint, length(model.linconstr))
     start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
     numels = length(index)
-    @dsp_ccall("loadDeterministic", Void, 
-        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Cint, Cint, 
+    @dsp_ccall("loadDeterministic", Void,
+        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Cint, Cint,
             Ptr{Cdouble}, Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, start, index, value, numels, ncols, nrows, clbd, cubd, ctype, obj, rlbd, rubd)
 end
@@ -320,9 +320,9 @@ end
 # Get functions
 ###############################################################################
 
-for func in [:freeSolver, 
-             :solveDe, 
-             :solveBd, 
+for func in [:freeSolver,
+             :solveDe,
+             :solveBd,
              :solveDd]
     strfunc = string(func)
     @eval begin
@@ -369,15 +369,15 @@ end
 function getDataFormat(model::JuMP.Model)
     # Get a column-wise sparse matrix
     mat = prepConstrMatrix(model)
-    
+
     # Tranpose; now I have row-wise sparse matrix
     mat = mat'
-    
+
     # sparse description
     start = convert(Vector{Cint}, mat.colptr - 1)
     index = convert(Vector{Cint}, mat.rowval - 1)
     value = mat.nzval
-    
+
     # column type
     ctype = ""
     for i = 1:length(model.colCat)
@@ -390,7 +390,7 @@ function getDataFormat(model::JuMP.Model)
         end
     end
     ctype = convert(Vector{UInt8}, ctype)
-    
+
     # objective coefficients
     obj = JuMP.prepAffObjective(model)
     rlbd, rubd = JuMP.prepConstrBounds(model)
@@ -399,18 +399,18 @@ function getDataFormat(model::JuMP.Model)
     if model.objSense == :Max
         obj *= -1
     end
-    
+
     return start, index, value, model.colLower, model.colUpper, ctype, obj, rlbd, rubd
 end
 
-for (func,rtn) in [(:getNumScenarios, Cint), 
-                   (:getTotalNumCols, Cint), 
+for (func,rtn) in [(:getNumScenarios, Cint),
+                   (:getTotalNumCols, Cint),
                    (:getTotalNumRows, Cint),
-                   (:getStatus, Cint), 
-                   (:getNumIterations, Cint), 
-                   (:getNumNodes, Cint), 
-                   (:getWallTime, Cdouble), 
-                   (:getPrimalBound, Cdouble), 
+                   (:getStatus, Cint),
+                   (:getNumIterations, Cint),
+                   (:getNumNodes, Cint),
+                   (:getWallTime, Cdouble),
+                   (:getPrimalBound, Cdouble),
                    (:getDualBound, Cdouble),
                    (:getNumCouplingRows, Cint)]
     strfunc = string(func)
