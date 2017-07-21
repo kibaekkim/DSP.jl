@@ -10,6 +10,7 @@ using Dsp.DspCInterface
 import JuMP
 export
     readSmps, 
+    writeMps,
     getblocksolution, 
     optimize, 
     getprimobjval, 
@@ -157,6 +158,11 @@ function readSmps(filename::AbstractString)
     DspCInterface.freeModel(Dsp.model)
     # read Smps file
     DspCInterface.readSmps(Dsp.model, filename)
+end
+
+# Write model to MPS file
+function writeMps(filename::AbstractString)
+    DspCInterface.@dsp_ccall("writeMps", Void, (Ptr{Void}, Ptr{UInt8}), Dsp.model.p, filename)
 end
 
 ###############################################################################
