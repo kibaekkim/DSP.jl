@@ -79,12 +79,11 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
     DspCInterface.solve(Dsp.model)
 
     # solution status
-    statcode = DspCInterface.getSolutionStatus(Dsp.model)
+    statcode = DspCInterface.getStatus(Dsp.model)
     stat = parseStatusCode(statcode)
 
     # Extract solution from the solver
-    Dsp.model.numRows = DspCInterface.getNumRows(Dsp.model, 0)
-        + DspCInterface.getNumRows(Dsp.model, 1) * DspCInterface.getNumScenarios(Dsp.model)
+    Dsp.model.numRows = DspCInterface.getTotalNumRows(Dsp.model)
     Dsp.model.numCols = DspCInterface.getTotalNumCols(Dsp.model)
     m.objVal = NaN
     m.colVal = fill(NaN, Dsp.model.numCols)
@@ -130,7 +129,7 @@ function optimize(;suppress_warnings = false, options...)
     DspCInterface.solve(Dsp.model)
 
     # solution status
-    statcode = DspCInterface.getSolutionStatus(Dsp.model)
+    statcode = DspCInterface.getStatus(Dsp.model)
     stat = parseStatusCode(statcode)
 
     # Extract solution from the solver
@@ -220,7 +219,7 @@ function parseStatusCode(statcode::Integer)
     stat
 end
 
-function getDspSolution(m)
+function getDspSolution(m = nothing)
     Dsp.model.primVal = DspCInterface.getPrimalBound(Dsp.model)
     Dsp.model.dualVal = DspCInterface.getDualBound(Dsp.model)
 
@@ -260,6 +259,5 @@ function getDspSolution(m)
         end
     end
 end
-getDspSolution() = getDspSolution(nothing)
 
 end # module
