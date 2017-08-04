@@ -155,7 +155,7 @@ end
 # Block IDs
 ###############################################################################
 
-function setBlockIds(dsp::DspModel, nblocks::Integer, master_has_subblocks::Bool)
+function setBlockIds(dsp::DspModel, nblocks::Integer, master_has_subblocks = false)
     check_problem(dsp)
     # set number of blocks
     dsp.nblocks = nblocks
@@ -176,9 +176,8 @@ function setBlockIds(dsp::DspModel, nblocks::Integer, master_has_subblocks::Bool
     @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}), 
         dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids - 1))
 end
-setBlockIds(dsp, nblocks) = setBlockIds(dsp, nblocks, false)
 
-function getBlockIds(dsp::DspModel, master_has_subblocks::Bool)
+function getBlockIds(dsp::DspModel, master_has_subblocks = false)
     check_problem(dsp)
     # processor info
     mysize = dsp.comm_size
@@ -211,7 +210,6 @@ function getBlockIds(dsp::DspModel, master_has_subblocks::Bool)
     # return assigned block ids
     return proc_idx_set
 end
-getBlockIds(dsp) = getBlockIds(dsp, false)
 
 function getNumBlockCols(dsp::DspModel, m::JuMP.Model)
     check_problem(dsp)
