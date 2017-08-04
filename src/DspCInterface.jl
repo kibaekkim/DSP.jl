@@ -244,11 +244,11 @@ function readSmps(dsp::DspModel, filename::AbstractString)
     setBlockIds(dsp, getNumScenarios(dsp))
 end
 
-function loadProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
+function loadProblem(dsp::DspModel, model::JuMP.Model)
     check_problem(dsp)
     if haskey(model.ext, :DspBlocks)
         if dsp.solve_type in [:Dual, :Benders, :Extensive]
-            loadStochasticProblem(dsp, model, dedicatedMaster)
+            loadStochasticProblem(dsp, model)
         end
     else
         error("No block is defined.")
@@ -256,7 +256,7 @@ function loadProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
 end
 loadProblem(dsp::DspModel, model::JuMP.Model) = loadProblem(dsp, model, true);
 
-function loadStochasticProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
+function loadStochasticProblem(dsp::DspModel, model::JuMP.Model)
 
     # get DspBlocks
     blocks = model.ext[:DspBlocks]
