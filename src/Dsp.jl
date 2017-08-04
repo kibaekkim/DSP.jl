@@ -74,21 +74,23 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
     # solution status
     statcode = DspCInterface.getStatus(Dsp.model)
     stat = parseStatusCode(statcode)
-#=
-    # Extract solution from the solver
-    Dsp.model.numRows = DspCInterface.getTotalNumRows(Dsp.model)
-    Dsp.model.numCols = DspCInterface.getTotalNumCols(Dsp.model)
-    m.objVal = NaN
-    m.colVal = fill(NaN, Dsp.model.numCols)
+    
+    if Dsp.model.solve_type != :DW
+        # Extract solution from the solver
+        Dsp.model.numRows = DspCInterface.getTotalNumRows(Dsp.model)
+        Dsp.model.numCols = DspCInterface.getTotalNumCols(Dsp.model)
+        m.objVal = NaN
+        m.colVal = fill(NaN, Dsp.model.numCols)
 
-    if stat != :Optimal
-        suppress_warnings || warn("Not solved to optimality, status: $stat")
-    end
+        if stat != :Optimal
+            suppress_warnings || warn("Not solved to optimality, status: $stat")
+        end
 
-    if !(stat == :Infeasible || stat == :Unbounded)
-        getDspSolution(m)
+        if !(stat == :Infeasible || stat == :Unbounded)
+            getDspSolution(m)
+        end
     end
-=#
+    
     # Return the solve status
     stat
 end
