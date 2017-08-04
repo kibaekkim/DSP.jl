@@ -133,11 +133,12 @@ function optimize(;suppress_warnings = false, options...)
     if stat != :Optimal
         suppress_warnings || warn("Not solved to optimality, status: $stat")
     end
-#=
-    if !(stat == :Infeasible || stat == :Unbounded)
-        getDspSolution(nothing)
+
+    if Dsp.model.solve_type != :DW
+        if !(stat == :Infeasible || stat == :Unbounded)
+            getDspSolution()
+        end
     end
-=#
     # Return the solve status
     stat
 end
