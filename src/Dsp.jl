@@ -23,6 +23,12 @@ export
 # DspModel placeholder
 model = DspModel()
 
+type BlockStructure
+    parent
+    children::Dict{Int,JuMP.Model}
+    weight::Dict{Int,Float64}
+end
+
 ###############################################################################
 # Override JuMP.Model
 ###############################################################################
