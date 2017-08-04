@@ -241,8 +241,8 @@ function getDspSolution(m = nothing)
         # maximization?
         if m.objSense == :Max
             m.objVal *= -1
-            dsp.primVal *= -1
-            dsp.dualVal *= -1
+            Dsp.model.primVal *= -1
+            Dsp.model.dualVal *= -1
         end
     end
 end
