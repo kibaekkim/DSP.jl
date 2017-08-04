@@ -247,10 +247,11 @@ end
 function loadProblem(dsp::DspModel, model::JuMP.Model, dedicatedMaster::Bool)
     check_problem(dsp)
     if haskey(model.ext, :DspBlocks)
-        loadStochasticProblem(dsp, model, dedicatedMaster)
+        if dsp.solve_type in [:Dual, :Benders, :Extensive]
+            loadStochasticProblem(dsp, model, dedicatedMaster)
+        end
     else
-        warn("No block is defined.")
-        loadDeterministicProblem(dsp, model)
+        error("No block is defined.")
     end
 end
 loadProblem(dsp::DspModel, model::JuMP.Model) = loadProblem(dsp, model, true);
@@ -420,21 +421,6 @@ for (func,rtn) in [(:getNumScenarios, Cint),
             return @dsp_ccall($strfunc, $rtn, (Ptr{Void},), dsp.p)
         end
     end
-end
-getSolutionStatus(dsp::DspModel) = getStatus(dsp)
-function getNumRows(dsp::DspModel, num::Integer)
-    @dsp_ccall("getNumRows", Cint, (Ptr{Void}, Cint), dsp.p, num)
-end
-function getNumCols(dsp::DspModel, num::Integer)
-    @dsp_ccall("getNumCols", Cint, (Ptr{Void}, Cint), dsp.p, num)
-end
-
-function getObjCoef(dsp::DspModel)
-    check_problem(dsp)
-    num = getTotalNumCols()
-    obj = Array(Cdouble, num)
-    @dsp_ccall("getObjCoef", Void, (Ptr{Void}, Ptr{Cdouble}), dsp.p, obj)
-    return obj
 end
 
 function getSolution(dsp::DspModel, num::Integer)
