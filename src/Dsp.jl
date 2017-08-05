@@ -3,7 +3,6 @@
 module Dsp
 
 include("DspCInterface.jl")
-include("block.jl")
 
 using Dsp.DspCInterface
 
