@@ -10,6 +10,7 @@ using Dsp.DspCInterface
 import JuMP
 export
     readSmps, 
+    writeMps,
     getblocksolution, 
     optimize, 
     getprimobjval, 
@@ -21,6 +22,12 @@ export
 
 # DspModel placeholder
 model = DspModel()
+
+type BlockStructure
+    parent
+    children::Dict{Int,JuMP.Model}
+    weight::Dict{Int,Float64}
+end
 
 ###############################################################################
 # Override JuMP.Model
@@ -62,7 +69,7 @@ end
 
 # This function is hooked by JuMP (see block.jl)
 function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
-
+    # parse options
     setoptions(options)
 
     # load JuMP model to Dsp
@@ -116,7 +123,7 @@ end
 ###############################################################################
 
 function optimize(;suppress_warnings = false, options...)
-
+    # parse options
     setoptions(options)
 
     # solve
@@ -150,6 +157,11 @@ function readSmps(filename::AbstractString)
     DspCInterface.freeModel(Dsp.model)
     # read Smps file
     DspCInterface.readSmps(Dsp.model, filename)
+end
+
+# Write model to MPS file
+function writeMps(filename::AbstractString)
+    DspCInterface.@dsp_ccall("writeMps", Void, (Ptr{Void}, Ptr{UInt8}), Dsp.model.p, filename)
 end
 
 ###############################################################################

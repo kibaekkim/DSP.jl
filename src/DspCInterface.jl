@@ -13,12 +13,12 @@ export DspModel
 ###############################################################################
 
 macro dsp_ccall(func, args...)
-    @static if is_unix() 
+    @static if is_unix()
         return esc(quote
             ccall(($func, "libDsp"), $(args...))
         end)
     end
-    @static if is_windows() 
+    @static if is_windows()
         return esc(quote
             ccall(($func, "libDsp"), stdcall, $(args...))
         end)
@@ -155,7 +155,7 @@ end
 # Block IDs
 ###############################################################################
 
-function setBlockIds(dsp::DspModel, nblocks::Integer, master_has_subblocks = false)
+function setBlockIds(dsp::DspModel, nblocks::Integer, master_has_subblocks::Bool = false)
     check_problem(dsp)
     # set number of blocks
     dsp.nblocks = nblocks
@@ -173,11 +173,11 @@ function setBlockIds(dsp::DspModel, nblocks::Integer, master_has_subblocks = fal
     dsp.block_ids = getBlockIds(dsp, master_has_subblocks)
     #@show dsp.block_ids
     # send the block ids to Dsp
-    @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}), 
+    @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}),
         dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids - 1))
 end
 
-function getBlockIds(dsp::DspModel, master_has_subblocks = false)
+function getBlockIds(dsp::DspModel, master_has_subblocks::Bool = false)
     check_problem(dsp)
     # processor info
     mysize = dsp.comm_size
@@ -186,7 +186,7 @@ function getBlockIds(dsp::DspModel, master_has_subblocks = false)
     proc_idx_set = Int[]
     # DSP is further parallelized with mysize > dsp.nblocks.
     modrank = myrank % dsp.nblocks
-    # If we have more than one processor, 
+    # If we have more than one processor,
     # do not assign a sub-block to the master.
     if master_has_subblocks
         # assign sub-blocks in round-robin fashion
@@ -258,7 +258,6 @@ function loadProblem(dsp::DspModel, model::JuMP.Model)
             loadStochasticProblem(dsp, model)
         elseif dsp.solve_type in [:DW]
             loadStructuredProblem(dsp, model)
-            # loadDeterministicProblem(dsp, model)
         end
     else
         error("No block is defined.")
@@ -266,10 +265,9 @@ function loadProblem(dsp::DspModel, model::JuMP.Model)
 end
 
 function loadStochasticProblem(dsp::DspModel, model::JuMP.Model)
-    
     # get DspBlocks
     blocks = model.ext[:DspBlocks]
-    
+
     nscen  = dsp.nblocks
     ncols1 = model.numCols
     nrows1 = length(model.linconstr)
@@ -280,23 +278,23 @@ function loadStochasticProblem(dsp::DspModel, model::JuMP.Model)
         nrows2 = length(s.linconstr)
         break
     end
-    
+
     # set scenario indices for each MPI processor
     if dsp.comm_size > 1
         ncols2 = MPI.allreduce([ncols2], MPI.MAX, dsp.comm)[1]
         nrows2 = MPI.allreduce([nrows2], MPI.MAX, dsp.comm)[1]
     end
-    
+
     @dsp_ccall("setNumberOfScenarios", Void, (Ptr{Void}, Cint), dsp.p, convert(Cint, nscen))
-    @dsp_ccall("setDimensions", Void, 
-        (Ptr{Void}, Cint, Cint, Cint, Cint), 
+    @dsp_ccall("setDimensions", Void,
+        (Ptr{Void}, Cint, Cint, Cint, Cint),
         dsp.p, convert(Cint, ncols1), convert(Cint, nrows1), convert(Cint, ncols2), convert(Cint, nrows2))
-    
+
     # get problem data
     start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
-    
-    @dsp_ccall("loadFirstStage", Void, 
-        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, 
+
+    @dsp_ccall("loadFirstStage", Void,
+        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
             Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
 
@@ -306,9 +304,9 @@ function loadStochasticProblem(dsp::DspModel, model::JuMP.Model)
         probability = blocks.weight[id]
         # get model data
         start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(blk)
-        @dsp_ccall("loadSecondStage", Void, 
-            (Ptr{Void}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, 
-                Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}), 
+        @dsp_ccall("loadSecondStage", Void,
+            (Ptr{Void}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
+                Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, id-1, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
     end
 end
@@ -388,8 +386,8 @@ function loadDeterministicProblem(dsp::DspModel, model::JuMP.Model)
     nrows = convert(Cint, length(model.linconstr))
     start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
     numels = length(index)
-    @dsp_ccall("loadDeterministic", Void, 
-        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Cint, Cint, 
+    @dsp_ccall("loadDeterministic", Void,
+        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Cint, Cint,
             Ptr{Cdouble}, Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, start, index, value, numels, ncols, nrows, clbd, cubd, ctype, obj, rlbd, rubd)
 end
@@ -416,7 +414,7 @@ for func in [:solveBdMpi, :solveDdMpi, :solveDwMpi]
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel, comm)
-            return @dsp_ccall($strfunc, Void, (Ptr{Void}, Cint), dsp.p, convert(Cint, comm.val))
+            return @dsp_ccall($strfunc, Void, (Ptr{Void}, MPI.CComm), dsp.p, convert(MPI.CComm, comm))
         end
     end
 end
@@ -453,15 +451,15 @@ end
 function getDataFormat(model::JuMP.Model)
     # Get a column-wise sparse matrix
     mat = prepConstrMatrix(model)
-    
+
     # Tranpose; now I have row-wise sparse matrix
     mat = mat'
-    
+
     # sparse description
     start = convert(Vector{Cint}, mat.colptr - 1)
     index = convert(Vector{Cint}, mat.rowval - 1)
     value = mat.nzval
-    
+
     # column type
     ctype = ""
     for i = 1:length(model.colCat)
@@ -474,7 +472,7 @@ function getDataFormat(model::JuMP.Model)
         end
     end
     ctype = convert(Vector{UInt8}, ctype)
-    
+
     # objective coefficients
     obj = JuMP.prepAffObjective(model)
     rlbd, rubd = JuMP.prepConstrBounds(model)
@@ -483,7 +481,7 @@ function getDataFormat(model::JuMP.Model)
     if model.objSense == :Max
         obj *= -1
     end
-    
+
     return start, index, value, model.colLower, model.colUpper, ctype, obj, rlbd, rubd
 end
 
@@ -503,18 +501,6 @@ for (func,rtn) in [(:getNumScenarios, Cint),
             return @dsp_ccall($strfunc, $rtn, (Ptr{Void},), dsp.p)
         end
     end
-end
-
-function getObjCoef(dsp::DspModel)
-    check_problem(dsp)
-    num = getTotalNumCols()
-    obj = Array(Cdouble, num)
-    @dsp_ccall("getObjCoef", Void, (Ptr{Void}, Ptr{Cdouble}), dsp.p, obj)
-    return obj
-end
-
-function getNumRows(dsp::DspModel, stage::Integer)
-    return @dsp_ccall("getNumRows", Void, (Ptr{Void}, Cint), dsp.p, stage)
 end
 
 function getSolution(dsp::DspModel, num::Integer)
