@@ -34,13 +34,13 @@ end
 ###############################################################################
 
 # This is for the master problem.
-function JuMP.Model(nblocks::Integer)
+function JuMP.Model(nblocks::Integer, master_has_subblocks::Bool = false)
     # construct model
     m = JuMP.Model()
     # free DspModel
     DspCInterface.freeModel(Dsp.model)
     # set block ids
-    DspCInterface.setBlockIds(Dsp.model, nblocks)
+    DspCInterface.setBlockIds(Dsp.model, nblocks, master_has_subblocks)
     # set extension
     m.ext[:DspBlocks] = BlockStructure(nothing, Dict{Int,JuMP.Model}(), Dict{Int,Float64}())
     # set solvehook

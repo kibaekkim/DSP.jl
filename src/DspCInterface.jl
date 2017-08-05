@@ -155,7 +155,7 @@ end
 # Block IDs
 ###############################################################################
 
-function setBlockIds(dsp::DspModel, nblocks::Integer)
+function setBlockIds(dsp::DspModel, nblocks::Integer, master_has_subblocks::Bool = false)
     check_problem(dsp)
     # set number of blocks
     dsp.nblocks = nblocks
@@ -170,14 +170,14 @@ function setBlockIds(dsp::DspModel, nblocks::Integer)
     #@show dsp.comm_size
     #@show dsp.comm_rank
     # get block ids with MPI settings
-    dsp.block_ids = getBlockIds(dsp)
+    dsp.block_ids = getBlockIds(dsp, master_has_subblocks)
     #@show dsp.block_ids
     # send the block ids to Dsp
     @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}),
         dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids - 1))
 end
 
-function getBlockIds(dsp::DspModel)
+function getBlockIds(dsp::DspModel, master_has_subblocks::Bool = false)
     check_problem(dsp)
     # processor info
     mysize = dsp.comm_size
