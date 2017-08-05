@@ -81,21 +81,23 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
     # solution status
     statcode = DspCInterface.getStatus(Dsp.model)
     stat = parseStatusCode(statcode)
+    
+    if Dsp.model.solve_type != :DW
+        # Extract solution from the solver
+        Dsp.model.numRows = DspCInterface.getTotalNumRows(Dsp.model)
+        Dsp.model.numCols = DspCInterface.getTotalNumCols(Dsp.model)
+        m.objVal = NaN
+        m.colVal = fill(NaN, Dsp.model.numCols)
 
-    # Extract solution from the solver
-    Dsp.model.numRows = DspCInterface.getTotalNumRows(Dsp.model)
-    Dsp.model.numCols = DspCInterface.getTotalNumCols(Dsp.model)
-    m.objVal = NaN
-    m.colVal = fill(NaN, Dsp.model.numCols)
+        if stat != :Optimal
+            suppress_warnings || warn("Not solved to optimality, status: $stat")
+        end
 
-    if stat != :Optimal
-        suppress_warnings || warn("Not solved to optimality, status: $stat")
+        if !(stat == :Infeasible || stat == :Unbounded)
+            getDspSolution(m)
+        end
     end
-
-    if !(stat == :Infeasible || stat == :Unbounded)
-        getDspSolution(m)
-    end
-
+    
     # Return the solve status
     stat
 end
@@ -105,7 +107,7 @@ function setoptions(options)
         if optname == :param
             DspCInterface.readParamFile(Dsp.model, optval)
         elseif optname == :solve_type
-            if optval in [:Dual, :Benders, :Extensive]
+            if optval in [:Dual, :Benders, :Extensive, :DW]
                 Dsp.model.solve_type = optval
             else
                 warn("solve_type $optval is not available.")
@@ -121,7 +123,6 @@ end
 ###############################################################################
 
 function optimize(;suppress_warnings = false, options...)
-
     # parse options
     setoptions(options)
 
@@ -140,10 +141,11 @@ function optimize(;suppress_warnings = false, options...)
         suppress_warnings || warn("Not solved to optimality, status: $stat")
     end
 
-    if !(stat == :Infeasible || stat == :Unbounded)
-        getDspSolution()
+    if Dsp.model.solve_type != :DW
+        if !(stat == :Infeasible || stat == :Unbounded)
+            getDspSolution()
+        end
     end
-
     # Return the solve status
     stat
 end

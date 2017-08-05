@@ -188,17 +188,24 @@ function getBlockIds(dsp::DspModel, master_has_subblocks::Bool = false)
     modrank = myrank % dsp.nblocks
     # If we have more than one processor,
     # do not assign a sub-block to the master.
-    if mysize > 1
-        if myrank == 0
-            return proc_idx_set
+    if master_has_subblocks
+        # assign sub-blocks in round-robin fashion
+        for s = modrank:mysize:(dsp.nblocks-1)
+            push!(proc_idx_set, s+1)
         end
-        # exclude master
-        mysize -= 1;
-        modrank = (myrank-1) % dsp.nblocks
-    end
-    # assign sub-blocks in round-robin fashion
-    for s = modrank:mysize:(dsp.nblocks-1)
-        push!(proc_idx_set, s+1)
+    else
+        if mysize > 1
+            if myrank == 0
+                return proc_idx_set
+            end
+            # exclude master
+            mysize -= 1;
+            modrank = (myrank-1) % dsp.nblocks
+        end
+        # assign sub-blocks in round-robin fashion
+        for s = modrank:mysize:(dsp.nblocks-1)
+            push!(proc_idx_set, s+1)
+        end
     end
     # return assigned block ids
     return proc_idx_set
@@ -249,15 +256,15 @@ function loadProblem(dsp::DspModel, model::JuMP.Model)
     if haskey(model.ext, :DspBlocks)
         if dsp.solve_type in [:Dual, :Benders, :Extensive]
             loadStochasticProblem(dsp, model)
+        elseif dsp.solve_type in [:DW]
+            loadStructuredProblem(dsp, model)
         end
     else
         error("No block is defined.")
     end
 end
-loadProblem(dsp::DspModel, model::JuMP.Model) = loadProblem(dsp, model, true);
 
 function loadStochasticProblem(dsp::DspModel, model::JuMP.Model)
-
     # get DspBlocks
     blocks = model.ext[:DspBlocks]
 
@@ -302,7 +309,76 @@ function loadStochasticProblem(dsp::DspModel, model::JuMP.Model)
                 Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, id-1, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
     end
+end
 
+function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
+
+    ncols_master = model.numCols
+    nrows_master = length(model.linconstr)
+    # @show ncols_master
+    # @show nrows_master
+
+    # TODO: do something for MPI
+    
+    # load master
+    start, index, value, clbd_master, cubd_master, ctype_master, obj_master, rlbd, rubd = getDataFormat(model)
+    @dsp_ccall("loadBlockProblem", Void, (
+        Ptr{Void},    # env
+        Cint,         # id
+        Cint,         # ncols
+        Cint,         # nrows
+        Cint,         # numels
+        Ptr{Cint},    # start
+        Ptr{Cint},    # index
+        Ptr{Cdouble}, # value
+        Ptr{Cdouble}, # clbd
+        Ptr{Cdouble}, # cubd
+        Ptr{UInt8},   # ctype
+        Ptr{Cdouble}, # obj
+        Ptr{Cdouble}, # rlbd
+        Ptr{Cdouble}  # rubd
+        ),
+        dsp.p, 0, ncols_master, nrows_master, start[nrows_master+1],
+        start, index, value, clbd_master, cubd_master, ctype_master, obj_master, rlbd, rubd)
+
+    # going over blocks
+    blocks = model.ext[:DspBlocks]
+    for id in dsp.block_ids
+        child = blocks.children[id]
+        weight = blocks.weight[id]
+        ncols_block = child.numCols # number of columns not coupled with the master
+        nrows_block = length(child.linconstr)
+        # @show id
+        # @show ncols_block
+        # @show nrows_block
+        # load blocks
+        start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(child)
+        # @show start
+        # @show index
+        # @show value
+        @dsp_ccall("loadBlockProblem", Void, (
+            Ptr{Void},    # env
+            Cint,         # id
+            Cint,         # ncols
+            Cint,         # nrows
+            Cint,         # numels
+            Ptr{Cint},    # start
+            Ptr{Cint},    # index
+            Ptr{Cdouble}, # value
+            Ptr{Cdouble}, # clbd
+            Ptr{Cdouble}, # cubd
+            Ptr{UInt8},   # ctype
+            Ptr{Cdouble}, # obj
+            Ptr{Cdouble}, # rlbd
+            Ptr{Cdouble}  # rubd
+            ),
+            dsp.p, id, ncols_master + ncols_block, nrows_block, start[nrows_block+1], 
+            start, index, value, [clbd_master;clbd], [cubd_master;cubd], [ctype_master;ctype], 
+            [obj_master;obj], rlbd, rubd)
+    end
+
+    # Finalize loading blocks
+    @dsp_ccall("updateBlocks", Void, (Ptr{Void},), dsp.p)
 end
 
 function loadDeterministicProblem(dsp::DspModel, model::JuMP.Model)
@@ -321,10 +397,11 @@ end
 # Get functions
 ###############################################################################
 
-for func in [:freeSolver,
-             :solveDe,
-             :solveBd,
-             :solveDd]
+for func in [:freeSolver, 
+             :solveDe, 
+             :solveBd, 
+             :solveDd, 
+             :solveDw]
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel)
@@ -333,7 +410,7 @@ for func in [:freeSolver,
     end
 end
 
-for func in [:solveBdMpi, :solveDdMpi]
+for func in [:solveBdMpi, :solveDdMpi, :solveDwMpi]
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel, comm)
@@ -351,12 +428,16 @@ function solve(dsp::DspModel)
             solveBd(dsp);
         elseif dsp.solve_type == :Extensive
             solveDe(dsp);
+        elseif dsp.solve_type == :DW
+            solveDw(dsp);
         end
     elseif dsp.comm_size > 1
         if dsp.solve_type == :Dual
             solveDdMpi(dsp, dsp.comm);
         elseif dsp.solve_type == :Benders
             solveBdMpi(dsp, dsp.comm);
+        elseif dsp.solve_type == :DW
+            solveDwMpi(dsp, dsp.comm);
         elseif dsp.solve_type == :Extensive
             solveDe(dsp);
         end
@@ -404,16 +485,15 @@ function getDataFormat(model::JuMP.Model)
     return start, index, value, model.colLower, model.colUpper, ctype, obj, rlbd, rubd
 end
 
-for (func,rtn) in [(:getNumScenarios, Cint),
-                   (:getTotalNumCols, Cint),
-                   (:getTotalNumRows, Cint),
-                   (:getStatus, Cint),
-                   (:getNumIterations, Cint),
-                   (:getNumNodes, Cint),
-                   (:getWallTime, Cdouble),
-                   (:getPrimalBound, Cdouble),
-                   (:getDualBound, Cdouble),
-                   (:getNumCouplingRows, Cint)]
+for (func,rtn) in [(:getNumScenarios, Cint), 
+                   (:getTotalNumRows, Cint), 
+                   (:getTotalNumCols, Cint), 
+                   (:getStatus, Cint), 
+                   (:getNumIterations, Cint), 
+                   (:getNumNodes, Cint), 
+                   (:getWallTime, Cdouble), 
+                   (:getPrimalBound, Cdouble), 
+                   (:getDualBound, Cdouble)]
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel)
