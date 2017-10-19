@@ -242,7 +242,7 @@ end
 # Load problems
 ###############################################################################
 
-function readSmps(dsp::DspModel, filename::AbstractString, , master_has_subblocks::Bool = false)
+function readSmps(dsp::DspModel, filename::AbstractString, master_has_subblocks::Bool = false)
     # Check pointer to TssModel
     check_problem(dsp)
     # read smps files
