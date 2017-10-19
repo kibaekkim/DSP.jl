@@ -242,13 +242,13 @@ end
 # Load problems
 ###############################################################################
 
-function readSmps(dsp::DspModel, filename::AbstractString)
+function readSmps(dsp::DspModel, filename::AbstractString, , master_has_subblocks::Bool = false)
     # Check pointer to TssModel
     check_problem(dsp)
     # read smps files
     @dsp_ccall("readSmps", Void, (Ptr{Void}, Ptr{UInt8}), dsp.p, convert(Vector{UInt8}, filename))
     # set block Ids
-    setBlockIds(dsp, getNumScenarios(dsp))
+    setBlockIds(dsp, getNumScenarios(dsp), master_has_subblocks)
 end
 
 function loadProblem(dsp::DspModel, model::JuMP.Model)
