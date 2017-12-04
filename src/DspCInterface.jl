@@ -1,5 +1,5 @@
 module DspCInterface
-
+using Compat
 import ..Dsp
 import Compat: String, unsafe_wrap
 import JuMP
@@ -505,14 +505,14 @@ for (func,rtn) in [(:getNumScenarios, Cint),
 end
 
 function getSolution(dsp::DspModel, num::Integer)
-    sol = Array(Cdouble, num)
+    @compat sol = Array{Cdouble}(num)
     @dsp_ccall("getPrimalSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     return sol
 end
 getSolution(dsp::DspModel) = getSolution(dsp, getTotalNumCols(dsp))
 
 function getDualSolution(dsp::DspModel, num::Integer)
-    sol = Array(Cdouble, num)
+    @compat sol = Array{Cdouble}(num)
     @dsp_ccall("getDualSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     return sol
 end
