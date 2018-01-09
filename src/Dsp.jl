@@ -151,11 +151,11 @@ end
 JuMP.solve(;suppress_warnings = false, options...) = optimize(;suppress_warnings = false, options...)
 
 # Read model from SMPS files
-function readSmps(filename::AbstractString)
+function readSmps(filename::AbstractString, master_has_subblocks::Bool = false)
     # free DspModel
     DspCInterface.freeModel(Dsp.model)
     # read Smps file
-    DspCInterface.readSmps(Dsp.model, filename)
+    DspCInterface.readSmps(Dsp.model, filename, master_has_subblocks)
 end
 
 # Write model to MPS file
