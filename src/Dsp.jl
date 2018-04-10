@@ -226,30 +226,31 @@ function getDspSolution(m = nothing)
 
     if Dsp.model.solve_type == :Dual
         Dsp.model.rowVal = DspCInterface.getDualSolution(Dsp.model)
-    else
-        Dsp.model.colVal = DspCInterface.getSolution(Dsp.model)
-        if m != nothing
-            # parse solution to each block
-            n_start = 1
-            n_end = m.numCols
-            m.colVal = Dsp.model.colVal[n_start:n_end]
-            n_start += m.numCols
-            if haskey(m.ext, :DspBlocks) == true
-                numBlockCols = DspCInterface.getNumBlockCols(Dsp.model, m)
-                blocks = m.ext[:DspBlocks].children
-                for i in 1:Dsp.model.nblocks
-                    n_end += numBlockCols[i]
-                    if haskey(blocks, i)
-                        # @show b
-                        # @show n_start
-                        # @show n_end
-                        blocks[i].colVal = Dsp.model.colVal[n_start:n_end]
-                    end
-                    n_start += numBlockCols[i]
+	end
+
+    Dsp.model.colVal = DspCInterface.getSolution(Dsp.model)
+    if m != nothing
+        # parse solution to each block
+        n_start = 1
+        n_end = m.numCols
+        m.colVal = Dsp.model.colVal[n_start:n_end]
+        n_start += m.numCols
+        if haskey(m.ext, :DspBlocks) == true
+            numBlockCols = DspCInterface.getNumBlockCols(Dsp.model, m)
+            blocks = m.ext[:DspBlocks].children
+            for i in 1:Dsp.model.nblocks
+                n_end += numBlockCols[i]
+                if haskey(blocks, i)
+                    # @show b
+                    # @show n_start
+                    # @show n_end
+                    blocks[i].colVal = Dsp.model.colVal[n_start:n_end]
                 end
+                n_start += numBlockCols[i]
             end
         end
     end
+
     if m != nothing
         m.objVal = Dsp.model.primVal
         # maximization?
