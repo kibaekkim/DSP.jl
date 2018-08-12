@@ -25,7 +25,7 @@ macro dsp_ccall(func, args...)
     end
 end
 
-type DspModel
+mutable struct DspModel
     p::Ptr{Void}
 
     # Number of blocks
