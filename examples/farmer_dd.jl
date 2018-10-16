@@ -22,21 +22,22 @@ Minreq   = [200 240 0]     # minimum crop requirement
 # JuMP model
 m = Model(NS)
 
-@variable(m, x[i=CROPS,s=1:NS] >= 0, Int)
-@objective(m, Min, sum{probability[s] * Cost[i] * x[i,s], i=CROPS, s=1:NS})
-@constraint(m, nonant[i=CROPS,s=1], x[i,NS] - x[i,1] == 0)
-@constraint(m, nonant[i=CROPS,s=2:NS], x[i,s-1] - x[i,s] == 0)
-@constraint(m, const_budget[s=1:NS], sum{x[i,s], i=CROPS} <= Budget)
+@variable(m, 0 <= x[i=CROPS] <= 500, Int)
+@objective(m, Min, sum(Cost[i] * x[i] for i=CROPS))
+@constraint(m, const_budget, sum(x[i] for i=CROPS) <= Budget)
 
 for s in 1:NS
     blk = Model(m, s, probability[s])
 
     @variable(blk, y[j=PURCH] >= 0)
     @variable(blk, w[k=SELL] >= 0)
-    @objective(blk, Min, sum{Purchase[j] * y[j], j=PURCH} - sum{Sell[k] * w[k], k=SELL})
-    @constraint(blk, const_minreq[j=PURCH], Yield[s,j] * x[j,s] + y[j] - w[j] >= Minreq[j])
-    @constraint(blk, const_minreq_beets, Yield[s,3] * x[3,s] - w[3] - w[4] >= Minreq[3])
+
+    @objective(blk, Min, sum(Purchase[j] * y[j] for j=PURCH) - sum(Sell[k] * w[k] for k=SELL))
+
+    @constraint(blk, const_minreq[j=PURCH], Yield[s,j] * x[j] + y[j] - w[j] >= Minreq[j])
+    @constraint(blk, const_minreq_beets, Yield[s,3] * x[3] - w[3] - w[4] >= Minreq[3])
     @constraint(blk, const_aux, w[3] <= 6000)
 end
 
 solve(m)
+
