@@ -1,4 +1,4 @@
-# __precompile__()
+__precompile__(false)
 
 module Dsp
 
@@ -22,7 +22,7 @@ export
 # DspModel placeholder
 model = DspModel()
 
-struct BlockStructure
+mutable struct BlockStructure
     parent
     children::Dict{Int,JuMP.Model}
     weight::Dict{Int,Float64}
@@ -81,20 +81,18 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
     statcode = DspCInterface.getStatus(Dsp.model)
     stat = parseStatusCode(statcode)
     
-    if Dsp.model.solve_type != :DW
-        # Extract solution from the solver
-        Dsp.model.numRows = DspCInterface.getTotalNumRows(Dsp.model)
-        Dsp.model.numCols = DspCInterface.getTotalNumCols(Dsp.model)
-        m.objVal = NaN
-        m.colVal = fill(NaN, Dsp.model.numCols)
+    # Extract solution from the solver
+    Dsp.model.numRows = DspCInterface.getTotalNumRows(Dsp.model)
+    Dsp.model.numCols = DspCInterface.getTotalNumCols(Dsp.model)
+    m.objVal = NaN
+    m.colVal = fill(NaN, Dsp.model.numCols)
 
-        if stat != :Optimal
-            suppress_warnings || warn("Not solved to optimality, status: $stat")
-        end
+    if stat != :Optimal
+        suppress_warnings || warn("Not solved to optimality, status: $stat")
+    end
 
-        if !(stat == :Infeasible || stat == :Unbounded)
-            getDspSolution(m)
-        end
+    if !(stat == :Infeasible || stat == :Unbounded)
+        getDspSolution(m)
     end
     
     # Return the solve status
@@ -106,7 +104,7 @@ function setoptions(options)
         if optname == :param
             DspCInterface.readParamFile(Dsp.model, optval)
         elseif optname == :solve_type
-            if optval in [:Dual, :Benders, :Extensive, :DW]
+            if optval in [:Dual, :Benders, :Extensive, :BB]
                 Dsp.model.solve_type = optval
             else
                 warn("solve_type $optval is not available.")
@@ -140,7 +138,7 @@ function optimize(;suppress_warnings = false, options...)
         suppress_warnings || warn("Not solved to optimality, status: $stat")
     end
 
-    if Dsp.model.solve_type != :DW
+    if Dsp.model.solve_type != :BB
         if !(stat == :Infeasible || stat == :Unbounded)
             getDspSolution()
         end
@@ -160,7 +158,7 @@ end
 
 # Write model to MPS file
 function writeMps(filename::AbstractString)
-    DspCInterface.@dsp_ccall("writeMps", Void, (Ptr{Void}, Ptr{UInt8}), Dsp.model.p, filename)
+    DspCInterface.@dsp_ccall("writeMps", Cvoid, (Ptr{Cvoid}, Ptr{UInt8}), Dsp.model.p, filename)
 end
 
 ###############################################################################
@@ -228,38 +226,38 @@ function getDspSolution(m = nothing)
         Dsp.model.rowVal = DspCInterface.getDualSolution(Dsp.model)
 	end
 
-    Dsp.model.colVal = DspCInterface.getSolution(Dsp.model)
-    if m != nothing
-        # parse solution to each block
-        n_start = 1
-        n_end = m.numCols
-        m.colVal = Dsp.model.colVal[n_start:n_end]
-        n_start += m.numCols
-        if haskey(m.ext, :DspBlocks) == true
-            numBlockCols = DspCInterface.getNumBlockCols(Dsp.model, m)
-            blocks = m.ext[:DspBlocks].children
-            for i in 1:Dsp.model.nblocks
-                n_end += numBlockCols[i]
-                if haskey(blocks, i)
-                    # @show b
-                    # @show n_start
-                    # @show n_end
-                    blocks[i].colVal = Dsp.model.colVal[n_start:n_end]
+	if Dsp.model.solve_type != :BB || Dsp.model.primVal < 1.0e+20
+	    Dsp.model.colVal = DspCInterface.getSolution(Dsp.model)
+        if m != nothing
+            # parse solution to each block
+            n_start = 1
+            n_end = m.numCols
+            m.colVal = Dsp.model.colVal[n_start:n_end]
+            n_start += m.numCols
+            if haskey(m.ext, :DspBlocks) == true
+                numBlockCols = DspCInterface.getNumBlockCols(Dsp.model, m)
+                blocks = m.ext[:DspBlocks].children
+                for i in 1:Dsp.model.nblocks
+                    n_end += numBlockCols[i]
+                    if haskey(blocks, i)
+                        # @show b
+                        # @show n_start
+                        # @show n_end
+                        blocks[i].colVal = Dsp.model.colVal[n_start:n_end]
+                    end
+                    n_start += numBlockCols[i]
                 end
-                n_start += numBlockCols[i]
+            end
+    
+            m.objVal = Dsp.model.primVal
+            # maximization?
+            if m.objSense == :Max
+                m.objVal *= -1
+                Dsp.model.primVal *= -1
+                Dsp.model.dualVal *= -1
             end
         end
-    end
-
-    if m != nothing
-        m.objVal = Dsp.model.primVal
-        # maximization?
-        if m.objSense == :Max
-            m.objVal *= -1
-            Dsp.model.primVal *= -1
-            Dsp.model.dualVal *= -1
-        end
-    end
+	end
 end
 
 end # module

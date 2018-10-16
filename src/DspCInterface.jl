@@ -1,10 +1,19 @@
 module DspCInterface
-using Compat
+using Compat, Pkg
+using SparseArrays
 import ..Dsp
 import Compat: String, unsafe_wrap
 import JuMP
 
-Pkg.installed("MPI") == nothing || using MPI
+if isless(VERSION,v"1.0.0")
+	if Pkg.installed("MPI") == nothing
+		using MPI
+	end
+else
+	if "MPI" in keys(Pkg.installed())
+		using MPI
+	end
+end
 
 export DspModel
 
@@ -13,12 +22,12 @@ export DspModel
 ###############################################################################
 
 macro dsp_ccall(func, args...)
-    @static if is_unix()
+    @static if Compat.Sys.isunix()
         return esc(quote
             ccall(($func, "libDsp"), $(args...))
         end)
     end
-    @static if is_windows()
+    @static if Compat.Sys.iswindows()
         return esc(quote
             ccall(($func, "libDsp"), stdcall, $(args...))
         end)
@@ -26,7 +35,7 @@ macro dsp_ccall(func, args...)
 end
 
 mutable struct DspModel
-    p::Ptr{Void}
+    p::Ptr{Cvoid}
 
     # Number of blocks
     nblocks::Int
@@ -56,7 +65,7 @@ mutable struct DspModel
 
     function DspModel()
         # assign Dsp pointer
-        p = @dsp_ccall("createEnv", Ptr{Void}, ())
+        p = @dsp_ccall("createEnv", Ptr{Cvoid}, ())
         # initialize variables
         nblocks = 0
         solve_type = :Dual
@@ -73,7 +82,7 @@ mutable struct DspModel
         # create DspModel
         dsp = new(p, nblocks, solve_type, numRows, numCols, primVal, dualVal, colVal, rowVal, comm, comm_size, comm_rank, block_ids)
         # with finalizer
-        finalizer(dsp, freeDSP)
+        finalizer(freeDSP, dsp)
         # return DspModel
         return dsp
     end
@@ -83,7 +92,7 @@ function freeDSP(dsp::DspModel)
     if dsp.p == C_NULL
         return
     else
-        @dsp_ccall("freeEnv", Void, (Ptr{Void},), dsp.p)
+        @dsp_ccall("freeEnv", Cvoid, (Ptr{Cvoid},), dsp.p)
         dsp.p = C_NULL
     end
     dsp.nblocks = 0
@@ -99,7 +108,7 @@ end
 
 function freeModel(dsp::DspModel)
     check_problem(dsp)
-    @dsp_ccall("freeModel", Void, (Ptr{Void},), dsp.p)
+    @dsp_ccall("freeModel", Cvoid, (Ptr{Cvoid},), dsp.p)
     dsp.nblocks = 0
     dsp.numRows = 0
     dsp.numCols = 0
@@ -117,7 +126,7 @@ end
 
 function readParamFile(dsp::DspModel, param_file::AbstractString)
     check_problem(dsp)
-    @dsp_ccall("readParamFile", Void, (Ptr{Void}, Ptr{UInt8}), dsp.p, param_file);
+    @dsp_ccall("readParamFile", Cvoid, (Ptr{Cvoid}, Ptr{UInt8}), dsp.p, param_file);
 end
 
 function prepConstrMatrix(m::JuMP.Model)
@@ -160,7 +169,7 @@ function setBlockIds(dsp::DspModel, nblocks::Integer, master_has_subblocks::Bool
     # set number of blocks
     dsp.nblocks = nblocks
     # set MPI settings
-    if isdefined(:MPI) && MPI.Initialized()
+    if @isdefined(MPI) && MPI.Initialized()
         dsp.comm = MPI.COMM_WORLD
         dsp.comm_size = MPI.Comm_size(dsp.comm)
         dsp.comm_rank = MPI.Comm_rank(dsp.comm)
@@ -173,8 +182,8 @@ function setBlockIds(dsp::DspModel, nblocks::Integer, master_has_subblocks::Bool
     dsp.block_ids = getBlockIds(dsp, master_has_subblocks)
     #@show dsp.block_ids
     # send the block ids to Dsp
-    @dsp_ccall("setIntPtrParam", Void, (Ptr{Void}, Ptr{UInt8}, Cint, Ptr{Cint}),
-        dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids - 1))
+    @dsp_ccall("setIntPtrParam", Cvoid, (Ptr{Cvoid}, Ptr{UInt8}, Cint, Ptr{Cint}),
+        dsp.p, "ARR_PROC_IDX", convert(Cint, length(dsp.block_ids)), convert(Vector{Cint}, dsp.block_ids .- 1))
 end
 
 function getBlockIds(dsp::DspModel, master_has_subblocks::Bool = false)
@@ -246,7 +255,7 @@ function readSmps(dsp::DspModel, filename::AbstractString, master_has_subblocks:
     # Check pointer to TssModel
     check_problem(dsp)
     # read smps files
-    @dsp_ccall("readSmps", Void, (Ptr{Void}, Ptr{UInt8}), dsp.p, convert(Vector{UInt8}, filename))
+    @dsp_ccall("readSmps", Cvoid, (Ptr{Cvoid}, Ptr{UInt8}), dsp.p, convert(Vector{UInt8}, filename))
     # set block Ids
     setBlockIds(dsp, getNumScenarios(dsp), master_has_subblocks)
 end
@@ -256,7 +265,7 @@ function loadProblem(dsp::DspModel, model::JuMP.Model)
     if haskey(model.ext, :DspBlocks)
         if dsp.solve_type in [:Dual, :Benders, :Extensive]
             loadStochasticProblem(dsp, model)
-        elseif dsp.solve_type in [:DW]
+        elseif dsp.solve_type in [:BB]
             loadStructuredProblem(dsp, model)
         end
     else
@@ -285,16 +294,16 @@ function loadStochasticProblem(dsp::DspModel, model::JuMP.Model)
         nrows2 = MPI.allreduce([nrows2], MPI.MAX, dsp.comm)[1]
     end
 
-    @dsp_ccall("setNumberOfScenarios", Void, (Ptr{Void}, Cint), dsp.p, convert(Cint, nscen))
-    @dsp_ccall("setDimensions", Void,
-        (Ptr{Void}, Cint, Cint, Cint, Cint),
+    @dsp_ccall("setNumberOfScenarios", Cvoid, (Ptr{Cvoid}, Cint), dsp.p, convert(Cint, nscen))
+    @dsp_ccall("setDimensions", Cvoid,
+        (Ptr{Cvoid}, Cint, Cint, Cint, Cint),
         dsp.p, convert(Cint, ncols1), convert(Cint, nrows1), convert(Cint, ncols2), convert(Cint, nrows2))
 
     # get problem data
     start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
 
-    @dsp_ccall("loadFirstStage", Void,
-        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
+    @dsp_ccall("loadFirstStage", Cvoid,
+        (Ptr{Cvoid}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
             Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
 
@@ -304,8 +313,8 @@ function loadStochasticProblem(dsp::DspModel, model::JuMP.Model)
         probability = blocks.weight[id]
         # get model data
         start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(blk)
-        @dsp_ccall("loadSecondStage", Void,
-            (Ptr{Void}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
+        @dsp_ccall("loadSecondStage", Cvoid,
+            (Ptr{Cvoid}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble},
                 Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, id-1, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
     end
@@ -322,8 +331,8 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
     
     # load master
     start, index, value, clbd_master, cubd_master, ctype_master, obj_master, rlbd, rubd = getDataFormat(model)
-    @dsp_ccall("loadBlockProblem", Void, (
-        Ptr{Void},    # env
+    @dsp_ccall("loadBlockProblem", Cvoid, (
+        Ptr{Cvoid},    # env
         Cint,         # id
         Cint,         # ncols
         Cint,         # nrows
@@ -356,8 +365,8 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
         # @show start
         # @show index
         # @show value
-        @dsp_ccall("loadBlockProblem", Void, (
-            Ptr{Void},    # env
+        @dsp_ccall("loadBlockProblem", Cvoid, (
+            Ptr{Cvoid},    # env
             Cint,         # id
             Cint,         # ncols
             Cint,         # nrows
@@ -378,7 +387,7 @@ function loadStructuredProblem(dsp::DspModel, model::JuMP.Model)
     end
 
     # Finalize loading blocks
-    @dsp_ccall("updateBlocks", Void, (Ptr{Void},), dsp.p)
+    @dsp_ccall("updateBlocks", Cvoid, (Ptr{Cvoid},), dsp.p)
 end
 
 function loadDeterministicProblem(dsp::DspModel, model::JuMP.Model)
@@ -386,8 +395,8 @@ function loadDeterministicProblem(dsp::DspModel, model::JuMP.Model)
     nrows = convert(Cint, length(model.linconstr))
     start, index, value, clbd, cubd, ctype, obj, rlbd, rubd = getDataFormat(model)
     numels = length(index)
-    @dsp_ccall("loadDeterministic", Void,
-        (Ptr{Void}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Cint, Cint,
+    @dsp_ccall("loadDeterministic", Cvoid,
+        (Ptr{Cvoid}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Cint, Cint, Cint,
             Ptr{Cdouble}, Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
             dsp.p, start, index, value, numels, ncols, nrows, clbd, cubd, ctype, obj, rlbd, rubd)
 end
@@ -405,7 +414,7 @@ for func in [:freeSolver,
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel)
-            return @dsp_ccall($strfunc, Void, (Ptr{Void},), dsp.p)
+            return @dsp_ccall($strfunc, Cvoid, (Ptr{Cvoid},), dsp.p)
         end
     end
 end
@@ -414,7 +423,7 @@ for func in [:solveBdMpi, :solveDdMpi, :solveDwMpi]
     strfunc = string(func)
     @eval begin
         function $func(dsp::DspModel, comm)
-            return @dsp_ccall($strfunc, Void, (Ptr{Void}, MPI.CComm), dsp.p, convert(MPI.CComm, comm))
+            return @dsp_ccall($strfunc, Cvoid, (Ptr{Cvoid}, MPI.CComm), dsp.p, convert(MPI.CComm, comm))
         end
     end
 end
@@ -428,7 +437,7 @@ function solve(dsp::DspModel)
             solveBd(dsp);
         elseif dsp.solve_type == :Extensive
             solveDe(dsp);
-        elseif dsp.solve_type == :DW
+        elseif dsp.solve_type == :BB
             solveDw(dsp);
         end
     elseif dsp.comm_size > 1
@@ -436,7 +445,7 @@ function solve(dsp::DspModel)
             solveDdMpi(dsp, dsp.comm);
         elseif dsp.solve_type == :Benders
             solveBdMpi(dsp, dsp.comm);
-        elseif dsp.solve_type == :DW
+        elseif dsp.solve_type == :BB
             solveDwMpi(dsp, dsp.comm);
         elseif dsp.solve_type == :Extensive
             solveDe(dsp);
@@ -453,11 +462,11 @@ function getDataFormat(model::JuMP.Model)
     mat = prepConstrMatrix(model)
 
     # Tranpose; now I have row-wise sparse matrix
-    mat = mat'
+    mat = permutedims(mat)
 
     # sparse description
-    start = convert(Vector{Cint}, mat.colptr - 1)
-    index = convert(Vector{Cint}, mat.rowval - 1)
+    start = convert(Vector{Cint}, mat.colptr .- 1)
+    index = convert(Vector{Cint}, mat.rowval .- 1)
     value = mat.nzval
 
     # column type
@@ -471,7 +480,7 @@ function getDataFormat(model::JuMP.Model)
             ctype = ctype * "C";
         end
     end
-    ctype = convert(Vector{UInt8}, ctype)
+	ctype = Vector{UInt8}(ctype)
 
     # objective coefficients
     obj = JuMP.prepAffObjective(model)
@@ -499,21 +508,23 @@ for (func,rtn) in [(:getNumScenarios, Cint),
     @eval begin
         function $func(dsp::DspModel)
             check_problem(dsp)
-            return @dsp_ccall($strfunc, $rtn, (Ptr{Void},), dsp.p)
+            return @dsp_ccall($strfunc, $rtn, (Ptr{Cvoid},), dsp.p)
         end
     end
 end
 
 function getSolution(dsp::DspModel, num::Integer)
-    @compat sol = Array{Cdouble}(num)
-    @dsp_ccall("getPrimalSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
+    #@compat sol = Array{Cdouble}(num)
+	sol = zeros(num)
+    @dsp_ccall("getPrimalSolution", Cvoid, (Ptr{Cvoid}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     return sol
 end
 getSolution(dsp::DspModel) = getSolution(dsp, getTotalNumCols(dsp))
 
 function getDualSolution(dsp::DspModel, num::Integer)
-    @compat sol = Array{Cdouble}(num)
-    @dsp_ccall("getDualSolution", Void, (Ptr{Void}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
+    #@compat sol = Array{Cdouble}(num)
+	sol = zeros(num)
+    @dsp_ccall("getDualSolution", Cvoid, (Ptr{Cvoid}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     return sol
 end
 getDualSolution(dsp::DspModel) = getDualSolution(dsp, getNumCouplingRows(dsp))
