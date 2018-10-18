@@ -421,11 +421,19 @@ end
 
 for func in [:solveBdMpi, :solveDdMpi, :solveDwMpi]
     strfunc = string(func)
-    @eval begin
-        function $func(dsp::DspModel, comm)
-            return @dsp_ccall($strfunc, Cvoid, (Ptr{Cvoid}, MPI.CComm), dsp.p, convert(MPI.CComm, comm))
-        end
-    end
+    if @isdefined(MPI) && MPI.Initialized()
+        @eval begin
+            function $func(dsp::DspModel, comm)
+                return @dsp_ccall($strfunc, Cvoid, (Ptr{Cvoid}, MPI.CComm), dsp.p, convert(MPI.CComm, comm))
+	        end
+    	end
+    else
+        @eval begin
+            function $func(dsp::DspModel, comm)
+                error("MPI package is required to use this function.")
+			end
+		end
+	end
 end
 
 function solve(dsp::DspModel)

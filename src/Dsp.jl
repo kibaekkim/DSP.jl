@@ -4,7 +4,7 @@ module Dsp
 
 include("DspCInterface.jl")
 
-using Dsp.DspCInterface
+using .DspCInterface
 
 import JuMP
 export
