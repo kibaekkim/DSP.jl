@@ -5,7 +5,7 @@ import ..Dsp
 import Compat: String, unsafe_wrap
 import JuMP
 
-if isless(VERSION,v"1.0.0")
+if isless(VERSION,v"0.7.0")
 	if Pkg.installed("MPI") == nothing
 		using MPI
 	end
