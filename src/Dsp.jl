@@ -88,7 +88,7 @@ function dsp_solve(m::JuMP.Model; suppress_warnings = false, options...)
     m.colVal = fill(NaN, Dsp.model.numCols)
 
     if stat != :Optimal
-        suppress_warnings || warn("Not solved to optimality, status: $stat")
+        suppress_warnings || @warn("Not solved to optimality, status: $stat")
     end
 
     if !(stat == :Infeasible || stat == :Unbounded)
@@ -107,10 +107,10 @@ function setoptions(options)
             if optval in [:Dual, :Benders, :Extensive, :BB]
                 Dsp.model.solve_type = optval
             else
-                warn("solve_type $optval is not available.")
+                @warn("solve_type $optval is not available.")
             end
         else
-            warn("Options $optname is not available.")
+            @warn("Options $optname is not available.")
         end
     end
 end
@@ -135,7 +135,7 @@ function optimize(;suppress_warnings = false, options...)
     Dsp.model.numCols = DspCInterface.getTotalNumCols(Dsp.model)
 
     if stat != :Optimal
-        suppress_warnings || warn("Not solved to optimality, status: $stat")
+        suppress_warnings || @warn("Not solved to optimality, status: $stat")
     end
 
     if Dsp.model.solve_type != :BB
@@ -174,7 +174,7 @@ function getblocksolution(m::JuMP.Model)
             push!(sol, blocks[s].colVal)
         end
     else
-        warn("No block was created in the model.")
+        @warn("No block was created in the model.")
     end
     sol
 end
@@ -212,7 +212,7 @@ function parseStatusCode(statcode::Integer)
         stat = :Error
     else
         stat = :Unknown
-        warn("Unknown status: $statcode")
+        @warn("Unknown status: $statcode")
     end
 
     stat
