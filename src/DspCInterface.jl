@@ -421,10 +421,10 @@ end
 
 for func in [:solveBdMpi, :solveDdMpi, :solveDwMpi]
     strfunc = string(func)
-    if @isdefined(MPI) && MPI.Initialized()
+    if @isdefined(MPI) #&& MPI.Initialized()
         @eval begin
             function $func(dsp::DspModel, comm)
-                return @dsp_ccall($strfunc, Cvoid, (Ptr{Cvoid}, MPI.CComm), dsp.p, convert(MPI.CComm, comm))
+                return @dsp_ccall($strfunc, Cvoid, (Ptr{Cvoid}, MPI.CComm), dsp.p, MPI.CComm(comm))
 	        end
     	end
     else
@@ -488,7 +488,7 @@ function getDataFormat(model::JuMP.Model)
             ctype = ctype * "C";
         end
     end
-	ctype = Vector{UInt8}(ctype)
+    ctype = unsafe_wrap(Vector{UInt8}, ctype)
 
     # objective coefficients
     obj = JuMP.prepAffObjective(model)
@@ -523,8 +523,10 @@ end
 
 function getSolution(dsp::DspModel, num::Integer)
     #@compat sol = Array{Cdouble}(num)
-	sol = zeros(num)
-    @dsp_ccall("getPrimalSolution", Cvoid, (Ptr{Cvoid}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
+    sol = zeros(num)
+    if dsp.comm_rank == 0
+        @dsp_ccall("getPrimalSolution", Cvoid, (Ptr{Cvoid}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
+    end
     return sol
 end
 getSolution(dsp::DspModel) = getSolution(dsp, getTotalNumCols(dsp))
@@ -532,7 +534,9 @@ getSolution(dsp::DspModel) = getSolution(dsp, getTotalNumCols(dsp))
 function getDualSolution(dsp::DspModel, num::Integer)
     #@compat sol = Array{Cdouble}(num)
 	sol = zeros(num)
-    @dsp_ccall("getDualSolution", Cvoid, (Ptr{Cvoid}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
+    if dsp.comm_rank == 0
+        @dsp_ccall("getDualSolution", Cvoid, (Ptr{Cvoid}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
+    end
     return sol
 end
 getDualSolution(dsp::DspModel) = getDualSolution(dsp, getNumCouplingRows(dsp))
