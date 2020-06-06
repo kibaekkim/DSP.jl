@@ -1,5 +1,12 @@
 module Dsp
 
+@enum Methods begin
+    ExtensiveForm
+    Benders
+    Dual
+    Legacy
+end
+
 mutable struct Model
     p::Ptr{Cvoid}
 
@@ -7,10 +14,7 @@ mutable struct Model
     nblocks::Int
 
     # solve_type should be one of these:
-    # :Dual
-    # :Benders
-    # :Extensive
-    solve_type::Symbol
+    solve_type::Methods
 
     numRows::Int
     numCols::Int
@@ -28,6 +32,8 @@ mutable struct Model
     # The size of array is not necessarily same as nblocks,
     # as block ids may be distributed to multiple processors.
     block_ids::Vector{Integer}
+
+    is_stochastic::Bool
 end
 
 include("DspCInterface.jl")
@@ -42,7 +48,7 @@ const SJ = StructJuMP
 const MOI = MathOptInterface
 
 # Initialize Dsp.Model
-dsp_model = Model(C_NULL, 0, :Dual, 0, 0, NaN, NaN, [], [], nothing, 1, 0, [])
+dsp_model = Model(C_NULL, 0, Dual, 0, 0, NaN, NaN, [], [], nothing, 1, 0, [], false)
 
 function __init__()
     try
@@ -60,37 +66,41 @@ function __init__()
     end
 end
 
+freeSolver(dsp::Model) = DspCInterface.freeSolver(dsp)
+
 function freeModel(dsp::Model)
     @assert(dsp.p != C_NULL)
     DspCInterface.freeModel(dsp)
     dsp.nblocks = 0
-    dsp.solve_type = :Dual
+    dsp.solve_type = Dual
     dsp.numRows = 0
     dsp.numCols = 0
     dsp.primVal = NaN
     dsp.dualVal = NaN
     dsp.colVal = Vector{Float64}()
     dsp.rowVal = Vector{Float64}()
-    dsp.comm = nothing
-    dsp.comm_size = 1
-    dsp.comm_rank = 0
     dsp.block_ids = Vector{Integer}()
+    dsp.is_stochastic = false
 end
 
 function freeEnv(dsp::Model)
     @assert(dsp.p != C_NULL)
-    DspCInterface.freeEnv(dsp)
     freeModel(dsp)
+    DspCInterface.freeEnv(dsp)
+    dsp.p = C_NULL
+    dsp.comm = nothing
+    dsp.comm_size = 1
+    dsp.comm_rank = 0
 end
 
-function optimize!(m::SJ.StructuredModel; is_stochastic = false, options...)
+function optimize!(m::SJ.StructuredModel; options...)
     @assert(dsp_model.p != C_NULL)
 
     # remove existing model
     DspCInterface.freeModel(dsp_model)
 
     setoptions(dsp_model, options)
-    loadProblem(dsp_model, m, is_stochastic = is_stochastic)
+    loadProblem(dsp_model, m)
     solve(dsp_model)
 
     # solution status
@@ -130,13 +140,17 @@ function get_model_data(m::SJ.StructuredModel)
 
     # objective coefficients
     obj = zeros(num_variables(m))
-    for (v,coef) in objective_function(m).terms
-        obj[v.idx] = coef
+    if !(objective_function_type(m) <: Real)
+        for (v,coef) in objective_function(m).terms
+            obj[v.idx] = coef
+        end
     end
 
-    objsense = objective_sense(m) == MOI.MIN_SENSE ? :Min : :Max
+    if objective_sense(m) == MOI.MAX_SENSE
+        obj .*= -1
+    end
 
-    return start, index, value, rlbd, rubd, obj, objsense, clbd, cubd, ctype, cname
+    return start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname
 end
 
 function get_constraint_matrix(m::SJ.StructuredModel)
@@ -182,7 +196,10 @@ function get_constraint_matrix(m::SJ.StructuredModel)
     end
     @assert(pos-1==nnz)
 
-    mat = sparse(rind, cind, value, num_rows, num_cols)
+    # NOTE: DSP takes CSR (row-wise sparse matrix) format.
+    # So I simply switch the entries for columns and rows.
+    mat = sparse(cind, rind, value, num_cols, num_rows)
+    dropzeros!(mat)
 
     # sparse description
     start = convert(Vector{Cint}, mat.colptr .- 1)
@@ -201,8 +218,10 @@ function setoptions(dsp::Model, options)
     for (optname, optval) in options
         if optname == :param
             DspCInterface.readParamFile(dsp, optval)
+        elseif optname == :is_stochastic
+            dsp.is_stochastic = optval
         elseif optname == :solve_type
-            if optval in [:Dual, :Benders, :Extensive, :BB]
+            if optval in instances(Methods)
                 dsp.solve_type = optval
             else
                 @warn("solve_type $optval is not available.")
@@ -213,8 +232,9 @@ function setoptions(dsp::Model, options)
     end
 end
 
-function loadProblem(dsp::Model, model::SJ.StructuredModel; is_stochastic = false)
-    if is_stochastic
+function loadProblem(dsp::Model, model::SJ.StructuredModel)
+    DspCInterface.freeModel(dsp)
+    if dsp.is_stochastic
         loadStochasticProblem(dsp, model)
     else
         loadStructuredProblem(dsp, model)
@@ -244,12 +264,12 @@ function loadStochasticProblem(dsp::Model, model::SJ.StructuredModel)
     DspCInterface.setDimensions(dsp, ncols1, nrows1, ncols2, nrows2)
 
     # get problem data
-    start, index, value, rlbd, rubd, obj, objsense, clbd, cubd, ctype, cname = get_model_data(model)
+    start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname = get_model_data(model)
     DspCInterface.loadFirstStage(dsp, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
 
     for (id, blk) in SJ.getchildren(model)
         probability = SJ.getprobability(model)[id]
-        start, index, value, rlbd, rubd, obj, objsense, clbd, cubd, ctype, cname = get_model_data(blk)
+        start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname = get_model_data(blk)
         DspCInterface.loadSecondStage(dsp, id-1, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
     end
 end
@@ -262,8 +282,8 @@ function loadStructuredProblem(dsp::Model, model::SJ.StructuredModel)
     # TODO: do something for MPI
     
     # load master
-    start, index, value, rlbd, rubd, obj1, objsense, clbd1, cubd1, ctype1, cname = get_model_data(model)
-    DspCInterface.loadBlockProblem(dsp, 0, ncols1, nrows1, start[nrows1+1],
+    start, index, value, rlbd, rubd, obj1, clbd1, cubd1, ctype1, cname = get_model_data(model)
+    DspCInterface.loadBlockProblem(dsp, 0, ncols1, nrows1, start[end],
         start, index, value, clbd1, cubd1, ctype1, obj1, rlbd, rubd)
 
     # going over blocks
@@ -271,9 +291,8 @@ function loadStructuredProblem(dsp::Model, model::SJ.StructuredModel)
         probability = SJ.getprobability(model)[id]
         ncols2 = length(blk.variables)
         nrows2 = length(blk.constraints)
-        start, index, value, rlbd, rubd, obj, objsense, clbd, cubd, ctype, cname = get_model_data(blk)
-        obj .*= probability
-        DspCInterface.loadBlockProblem(dsp, id, ncols1 + ncols2, nrows2, start[nrows2+1], 
+        start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname = get_model_data(blk)
+        DspCInterface.loadBlockProblem(dsp, id, ncols1 + ncols2, nrows2, start[end], 
             start, index, value, [clbd1; clbd], [cubd1; cubd], [ctype1; ctype], [obj1; obj], rlbd, rubd)
     end
 
@@ -283,23 +302,39 @@ end
 
 function solve(dsp::Model)
     if dsp.comm_size == 1
-        if dsp.solve_type == :Dual
-            DspCInterface.solveDd(dsp);
-        elseif dsp.solve_type == :Benders
-            DspCInterface.solveBd(dsp);
-        elseif dsp.solve_type == :Extensive
+        if dsp.solve_type == Legacy
+            if dsp.is_stochastic
+                DspCInterface.solveDd(dsp);
+            else
+                @warn("This method is available for stochastic programs only.")
+            end
+        elseif dsp.solve_type == Benders
+            if dsp.is_stochastic
+                DspCInterface.solveBd(dsp);
+            else
+                @warn("This method is available for stochastic programs only.")
+            end
+        elseif dsp.solve_type == ExtensiveForm
             DspCInterface.solveDe(dsp);
-        elseif dsp.solve_type == :BB
+        elseif dsp.solve_type == Dual
             DspCInterface.solveDw(dsp);
         end
     elseif dsp.comm_size > 1
-        if dsp.solve_type == :Dual
-            DspCInterface.solveDdMpi(dsp, dsp.comm);
-        elseif dsp.solve_type == :Benders
-            DspCInterface.solveBdMpi(dsp, dsp.comm);
-        elseif dsp.solve_type == :BB
+        if dsp.solve_type == Legacy
+            if dsp.is_stochastic
+                DspCInterface.solveDdMpi(dsp, dsp.comm);
+            else
+                @warn("This method is available for stochastic programs only.")
+            end
+        elseif dsp.solve_type == Benders
+            if dsp.is_stochastic
+                DspCInterface.solveBdMpi(dsp, dsp.comm);
+            else
+                @warn("This method is available for stochastic programs only.")
+            end
+        elseif dsp.solve_type == Dual
             DspCInterface.solveDwMpi(dsp, dsp.comm);
-        elseif dsp.solve_type == :Extensive
+        elseif dsp.solve_type == ExtensiveForm
             DspCInterface.solveDe(dsp);
         end
     end

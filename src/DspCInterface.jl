@@ -62,7 +62,7 @@ loadSecondStage(dsp::Dsp.Model, id, probability, start, index, value, clbd, cubd
     (Ptr{Cvoid}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
     dsp.p, id, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
 
-loadBlockProblem(dsp::Dsp.Model, id, ncols, numels, nrows, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd) = @dsp_ccall(
+loadBlockProblem(dsp::Dsp.Model, id, ncols, nrows, numels, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd) = @dsp_ccall(
     "loadBlockProblem", Cvoid, (
     Ptr{Cvoid}, Cint, Cint, Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
     dsp.p, id, ncols, nrows, numels, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)

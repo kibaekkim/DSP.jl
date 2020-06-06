@@ -180,9 +180,9 @@ version = "0.1.2"
 
 [[Parsers]]
 deps = ["Dates", "Test"]
-git-tree-sha1 = "f0abb338b4d00306500056a3fd44c221b8473ef2"
+git-tree-sha1 = "eb3e09940c0d7ae01b01d9291ebad7b081c844d3"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
-version = "1.0.4"
+version = "1.0.5"
 
 [[Pkg]]
 deps = ["Dates", "LibGit2", "Libdl", "Logging", "Markdown", "Printf", "REPL", "Random", "SHA", "UUIDs"]
@@ -231,8 +231,8 @@ uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [[StructJuMP]]
 deps = ["JuMP", "LinearAlgebra", "MathOptInterface", "ParameterJuMP"]
-git-tree-sha1 = "84d8135eabb9c3b63f98de5fc75fe48458cc0827"
-repo-rev = "master"
+git-tree-sha1 = "1b2e6d224a6211785deabfabaa347bffc43926ad"
+repo-rev = "kibaekkim-patch-1"
 repo-url = "https://github.com/StructJuMP/StructJuMP.jl.git"
 uuid = "34f15cae-5318-50c9-93d3-9feadd34e321"
 version = "0.1.0"
