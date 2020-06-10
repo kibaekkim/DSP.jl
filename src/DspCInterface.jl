@@ -1,8 +1,7 @@
-module DspCInterface
+# module DspCInterface
 
 using Pkg
 using SparseArrays
-import ..Dsp
 using StructJuMP
 
 const SJ = StructJuMP
@@ -14,6 +13,71 @@ for (uuid, dep) in deps
     dep.version === nothing && continue
     if dep.name == "MPI"
         using MPI
+    end
+end
+
+mutable struct DspProblem
+    p::Ptr{Cvoid}
+
+    numRows::Dict{Int, Int}
+    numCols::Dict{Int, Int}
+    primVal::Float64
+    dualVal::Float64
+    colVal::Dict{Int, Vector{Float64}}
+    rowVal::Vector{Float64}
+    objective_sense::Float64
+    status::Int
+    solve_time::Float64
+
+    # Number of blocks
+    nblocks::Int
+
+    # Array of block ids:
+    # The size of array is not necessarily same as nblocks,
+    # as block ids may be distributed to multiple processors.
+    block_ids::Vector{Integer}
+
+    is_stochastic::Bool
+
+    # solve_type should be one of these:
+    solve_type::Methods
+
+    # MPI settings
+    comm
+    comm_size::Int
+    comm_rank::Int
+
+    function DspProblem()
+        prob = new(
+            C_NULL, # p
+            Dict(), # numRows
+            Dict(), # numCols
+            NaN, # primVal
+            NaN, # dualVal
+            Dict(), # colVal
+            [], # rowVal
+            1., # objective_sense
+            3998, # status
+            0., # solve_time
+            0, # nblocks
+            [], # block_ids
+            false, # is_stochastic
+            Dual, # solve_type
+            nothing, # comm
+            1, # comm_size
+            0 # comm_rank
+        )
+        prob.p = createEnv()
+        finalizer(freeEnv, prob)
+
+        # set MPI settings
+        if @isdefined(MPI) && MPI.Initialized()
+            prob.comm = MPI.COMM_WORLD
+            prob.comm_size = MPI.Comm_size(prob.comm)
+            prob.comm_rank = MPI.Comm_rank(prob.comm)
+        end
+
+        return prob
     end
 end
 
@@ -35,39 +99,65 @@ macro dsp_ccall(func, args...)
 end
 
 createEnv() = @dsp_ccall("createEnv", Ptr{Cvoid}, ())
-freeEnv(dsp::Dsp.Model) = @dsp_ccall("freeEnv", Cvoid, (Ptr{Cvoid},), dsp.p)
-freeModel(dsp::Dsp.Model) = @dsp_ccall("freeModel", Cvoid, (Ptr{Cvoid},), dsp.p)
 
-readParamFile(dsp::Dsp.Model, param_file::AbstractString) = @dsp_ccall(
-    "readParamFile", Cvoid, 
-    (Ptr{Cvoid}, Ptr{UInt8}), 
-    dsp.p, param_file)
+function freeEnv(dsp::DspProblem)
+    if dsp.p != C_NULL
+        freeModel(dsp)
+        @dsp_ccall("freeEnv", Cvoid, (Ptr{Cvoid},), dsp.p)
+        dsp.p = C_NULL
+    end
+    dsp.comm = nothing
+    dsp.comm_size = 1
+    dsp.comm_rank = 0
+end
+
+function freeModel(dsp::DspProblem)
+    @dsp_ccall("freeModel", Cvoid, (Ptr{Cvoid},), dsp.p)
+    dsp.numRows = Dict()
+    dsp.numCols = Dict()
+    dsp.primVal = NaN
+    dsp.dualVal = NaN
+    dsp.colVal = Dict()
+    dsp.rowVal = []
+    dsp.objective_sense = 1.
+    dsp.status = 3998
+    dsp.solve_time = 0.
+    dsp.nblocks = 0
+    dsp.block_ids = []
+    dsp.is_stochastic = false
+    dsp.solve_type = Dual
+end
 
 ###############################################################################
 # Load problems
 ###############################################################################
 
-readSmps(dsp::Dsp.Model, filename::AbstractString) = @dsp_ccall(
+readParamFile(dsp::DspProblem, param_file::AbstractString) = @dsp_ccall(
+    "readParamFile", Cvoid, 
+    (Ptr{Cvoid}, Ptr{UInt8}), 
+    dsp.p, param_file)
+
+readSmps(dsp::DspProblem, filename::AbstractString) = @dsp_ccall(
     "readSmps", Cvoid, 
     (Ptr{Cvoid}, Ptr{UInt8}), 
     dsp.p, convert(Vector{UInt8}, filename))
 
-loadFirstStage(dsp::Dsp.Model, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd) = @dsp_ccall(
+loadFirstStage(dsp::DspProblem, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd) = @dsp_ccall(
     "loadFirstStage", Cvoid,
     (Ptr{Cvoid}, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
     dsp.p, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
 
-loadSecondStage(dsp::Dsp.Model, id, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd) = @dsp_ccall(
+loadSecondStage(dsp::DspProblem, id, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd) = @dsp_ccall(
     "loadSecondStage", Cvoid,
     (Ptr{Cvoid}, Cint, Cdouble, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
     dsp.p, id, probability, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
 
-loadBlockProblem(dsp::Dsp.Model, id, ncols, nrows, numels, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd) = @dsp_ccall(
+loadBlockProblem(dsp::DspProblem, id, ncols, nrows, numels, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd) = @dsp_ccall(
     "loadBlockProblem", Cvoid, (
     Ptr{Cvoid}, Cint, Cint, Cint, Cint, Ptr{Cint}, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{UInt8}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
     dsp.p, id, ncols, nrows, numels, start, index, value, clbd, cubd, ctype, obj, rlbd, rubd)
 
-updateBlocks(dsp::Dsp.Model) = @dsp_ccall("updateBlocks", Cvoid, (Ptr{Cvoid},), dsp.p)
+updateBlocks(dsp::DspProblem) = @dsp_ccall("updateBlocks", Cvoid, (Ptr{Cvoid},), dsp.p)
 
 
 ###############################################################################
@@ -81,7 +171,7 @@ for func in [:freeSolver,
              :solveDw]
     strfunc = string(func)
     @eval begin
-        function $func(dsp::Dsp.Model)
+        function $func(dsp::DspProblem)
             return @dsp_ccall($strfunc, Cvoid, (Ptr{Cvoid},), dsp.p)
         end
     end
@@ -91,13 +181,13 @@ for func in [:solveBdMpi, :solveDdMpi, :solveDwMpi]
     strfunc = string(func)
     if @isdefined(MPI) #&& MPI.Initialized()
         @eval begin
-            function $func(dsp::Dsp.Model, comm)
-                return @dsp_ccall($strfunc, Cvoid, (Ptr{Cvoid}, MPI.CComm), dsp.p, MPI.CComm(comm))
+            function $func(dsp::DspProblem)
+                return @dsp_ccall($strfunc, Cvoid, (Ptr{Cvoid}, MPI.CComm), dsp.p, MPI.CComm(dsp.comm))
 	        end
     	end
     else
         @eval begin
-            function $func(dsp::Dsp.Model, comm)
+            function $func(dsp::DspProblem)
                 error("MPI package is required to use this function.")
 			end
 		end
@@ -109,6 +199,7 @@ end
 ###############################################################################
 
 for (func,rtn) in [(:getNumScenarios, Cint), 
+                   (:getNumSubproblems, Cint), 
                    (:getTotalNumRows, Cint), 
                    (:getTotalNumCols, Cint), 
                    (:getStatus, Cint), 
@@ -120,48 +211,48 @@ for (func,rtn) in [(:getNumScenarios, Cint),
                    (:getNumCouplingRows, Cint)]
     strfunc = string(func)
     @eval begin
-        function $func(dsp::Dsp.Model)
+        function $func(dsp::DspProblem)
             @assert(dsp.p != C_NULL)
             return @dsp_ccall($strfunc, $rtn, (Ptr{Cvoid},), dsp.p)
         end
     end
 end
 
-function getSolution(dsp::Dsp.Model, num::Integer)
+function getSolution(dsp::DspProblem, num::Integer)
     sol = zeros(num)
     if dsp.comm_rank == 0
         @dsp_ccall("getPrimalSolution", Cvoid, (Ptr{Cvoid}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     end
     return sol
 end
-getSolution(dsp::Dsp.Model) = getSolution(dsp, getTotalNumCols(dsp))
+getSolution(dsp::DspProblem) = getSolution(dsp, getTotalNumCols(dsp))
 
-function getDualSolution(dsp::Dsp.Model, num::Integer)
+function getDualSolution(dsp::DspProblem, num::Integer)
 	sol = zeros(num)
     if dsp.comm_rank == 0
         @dsp_ccall("getDualSolution", Cvoid, (Ptr{Cvoid}, Cint, Ptr{Cdouble}), dsp.p, num, sol)
     end
     return sol
 end
-getDualSolution(dsp::Dsp.Model) = getDualSolution(dsp, getNumCouplingRows(dsp))
+getDualSolution(dsp::DspProblem) = getDualSolution(dsp, getNumCouplingRows(dsp))
 
 ###############################################################################
 # Set functions
 ###############################################################################
 
-setNumberOfScenarios(dsp::Dsp.Model, nscen::Int) = @dsp_ccall(
+setNumberOfScenarios(dsp::DspProblem, nscen::Int) = @dsp_ccall(
     "setNumberOfScenarios", Cvoid,
     (Ptr{Cvoid}, Cint), 
     dsp.p, convert(Cint, nscen))
 
-setDimensions(dsp::Dsp.Model, ncols1::Int, nrows1::Int, ncols2::Int, nrows2::Int) = @dsp_ccall(
+setDimensions(dsp::DspProblem, ncols1::Int, nrows1::Int, ncols2::Int, nrows2::Int) = @dsp_ccall(
     "setDimensions", Cvoid,
     (Ptr{Cvoid}, Cint, Cint, Cint, Cint),
     dsp.p, convert(Cint, ncols1), convert(Cint, nrows1), convert(Cint, ncols2), convert(Cint, nrows2))
 
-setIntPtrParam(dsp::Dsp.Model, name::String, n::Int, v::Vector{Int}) = @dsp_ccall(
+setIntPtrParam(dsp::DspProblem, name::String, n::Int, v::Vector{Int}) = @dsp_ccall(
     "setIntPtrParam", Cvoid, 
     (Ptr{Cvoid}, Ptr{UInt8}, Cint, Ptr{Cint}),
     dsp.p, name, convert(Cint, n), convert(Vector{Cint}, v))
 
-end # end of module
+# end # end of module
