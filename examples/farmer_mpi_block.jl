@@ -51,6 +51,8 @@ m = StructuredModel(num_scenarios = NS)
 	- sum(probability[s] * Sell[k] * w[k,s] for k=SELL for s=1:NS))
 @constraint(m, nonant[i=CROPS,s=2:NS], x[i,s-1] - x[i,s] == 0)
 
+# TODO: Distributing blocks is not supported yet. 
+# This is because of the DSP implementation.
 for s in 1:NS
     blk = StructuredModel(parent = m, id = s)
 	@objective(blk, Min, 0.)
