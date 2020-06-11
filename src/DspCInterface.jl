@@ -59,7 +59,7 @@ mutable struct DspProblem
             1., # objective_sense
             3998, # status
             0., # solve_time
-            0, # nblocks
+            -1, # nblocks
             [], # block_ids
             false, # is_stochastic
             Dual, # solve_type
@@ -69,13 +69,6 @@ mutable struct DspProblem
         )
         prob.p = createEnv()
         finalizer(freeEnv, prob)
-
-        # set MPI settings
-        if @isdefined(MPI) && MPI.Initialized()
-            prob.comm = MPI.COMM_WORLD
-            prob.comm_size = MPI.Comm_size(prob.comm)
-            prob.comm_rank = MPI.Comm_rank(prob.comm)
-        end
 
         return prob
     end
@@ -179,10 +172,10 @@ end
 
 for func in [:solveBdMpi, :solveDdMpi, :solveDwMpi]
     strfunc = string(func)
-    if @isdefined(MPI) #&& MPI.Initialized()
+    if @isdefined(MPI)
         @eval begin
             function $func(dsp::DspProblem)
-                return @dsp_ccall($strfunc, Cvoid, (Ptr{Cvoid}, MPI.CComm), dsp.p, MPI.CComm(dsp.comm))
+                return @dsp_ccall($strfunc, Cvoid, (Ptr{Cvoid}, MPI.MPI_Comm), dsp.p, dsp.comm)
 	        end
     	end
     else

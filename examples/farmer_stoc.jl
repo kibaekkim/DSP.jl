@@ -1,7 +1,11 @@
-# Kibaek Kim - ANL MCS 2016
-# Farmer example from Birge and Louveaux book.
+"""
+Kibaek Kim - ANL MCS 2016
+  Updated in 2020
+Farmer example from Birge and Louveaux book.
+"""
 
-using JuMP, Dsp
+using StructJuMP
+using Dsp
 
 NS = 3;                        # number of scenarios
 probability = [1/3, 1/3, 1/3]; # probability
@@ -19,15 +23,14 @@ Yield    = [3.0 3.6 24.0;
             2.0 2.4 16.0]
 Minreq   = [200 240 0]     # minimum crop requirement
 
-# JuMP model
-m = Model(NS)
+m = StructuredModel(num_scenarios = NS)
 
 @variable(m, 0 <= x[i=CROPS] <= 500, Int)
 @objective(m, Min, sum(Cost[i] * x[i] for i=CROPS))
 @constraint(m, const_budget, sum(x[i] for i=CROPS) <= Budget)
 
 for s in 1:NS
-    blk = Model(m, s, probability[s])
+    blk = StructuredModel(parent = m, id = s, prob = probability[s])
 
     @variable(blk, y[j=PURCH] >= 0)
     @variable(blk, w[k=SELL] >= 0)
@@ -39,5 +42,15 @@ for s in 1:NS
     @constraint(blk, const_aux, w[3] <= 6000)
 end
 
-solve(m)
+status = optimize!(m, 
+    is_stochastic = true, # Needs to indicate that the model is of the stochastic program.
+    solve_type = Dsp.ExtensiveForm, # see instances(Dsp.Methods) for other methods
+    param = "examples/params.txt" # This path assumes running from the one-level upper directory (i.e., ../).
+    )
 
+if status == MOI.OPTIMAL
+    @show objective_value(m)
+    @show dual_objective_value(m)
+    @show value.(x)
+    @show dual() # This is available only for solve_type = Dsp.Legacy.
+end

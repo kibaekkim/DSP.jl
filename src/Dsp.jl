@@ -41,7 +41,7 @@ function check_dsp()
     end
 end
 
-function optimize!(m::SJ.StructuredModel; options...)
+function SJ.optimize!(m::SJ.StructuredModel; options...)
 
     # free any existing model pointer
     freeModel(dspenv)
@@ -187,8 +187,7 @@ function load_problem!(m::SJ.StructuredModel)
     else
         loadStructuredProblem!(m)
     end
-    dspenv.nblocks = getNumSubproblems(dspenv)
-    dspenv.block_ids = getBlockIds()
+    setBlocks()
 end
 
 function loadStochasticProblem!(model::SJ.StructuredModel)
@@ -206,8 +205,8 @@ function loadStochasticProblem!(model::SJ.StructuredModel)
 
     # set scenario indices for each MPI processor
     if dspenv.comm_size > 1
-        ncols2 = MPI.allreduce([ncols2], MPI.MAX, dspenv.comm)[1]
-        nrows2 = MPI.allreduce([nrows2], MPI.MAX, dspenv.comm)[1]
+        ncols2 = MPI.Allreduce([ncols2], MPI.MAX, dspenv.comm)[1]
+        nrows2 = MPI.Allreduce([nrows2], MPI.MAX, dspenv.comm)[1]
     end
 
     # set DspProblem data
@@ -352,19 +351,19 @@ end
 """
 Get the vector of block IDs that are assigned to the current MPI rank
 """
-function getBlockIds(master_has_subblocks::Bool = false)::Vector{Int}
+function getBlockIds(nblocks::Int = dspenv.nblocks, master_has_subblocks::Bool = true)::Vector{Int}
     # processor info
     mysize = dspenv.comm_size
     myrank = dspenv.comm_rank
     # empty block ids
     proc_idx_set = Int[]
-    # DSP is further parallelized with mysize > dsp.nblocks.
-    modrank = myrank % dspenv.nblocks
+    # DSP is further parallelized with mysize > nblocks.
+    modrank = myrank % nblocks
     # If we have more than one processor,
     # do not assign a sub-block to the master.
     if master_has_subblocks
         # assign sub-blocks in round-robin fashion
-        for s = modrank:mysize:(dspenv.nblocks-1)
+        for s = modrank:mysize:(nblocks-1)
             push!(proc_idx_set, s+1)
         end
     else
@@ -374,13 +373,14 @@ function getBlockIds(master_has_subblocks::Bool = false)::Vector{Int}
             end
             # exclude master
             mysize -= 1;
-            modrank = (myrank-1) % dspenv.nblocks
+            modrank = (myrank-1) % nblocks
         end
         # assign sub-blocks in round-robin fashion
-        for s = modrank:mysize:(dspenv.nblocks-1)
+        for s = modrank:mysize:(nblocks-1)
             push!(proc_idx_set, s+1)
         end
     end
+
     # return assigned block ids
     return proc_idx_set
 end
@@ -395,9 +395,9 @@ function getNumBlockCols()::Dict{Int,Int}
         num_proc_blocks = convert(Vector{Cint}, MPI.Allgather(length(dspenv.block_ids), dspenv.comm))
         #@show num_proc_blocks
         #@show collect(keys(blocks))
-        block_ids = MPI.Allgatherv(dspenv.block_ids, num_proc_blocks, dspenv.comm)
+        block_ids = MPI.Allgatherv(convert(Vector{Cint}, dspenv.block_ids), num_proc_blocks, dspenv.comm)
         #@show block_ids
-        ncols_to_send = Int[dspenv.numCols[id] for id in dspenv.block_ids]
+        ncols_to_send = Cint[dspenv.numCols[id] for id in dspenv.block_ids]
         #@show ncols_to_send
         ncols = MPI.Allgatherv(ncols_to_send, num_proc_blocks, dspenv.comm)
         #@show ncols
@@ -412,6 +412,31 @@ function getNumBlockCols()::Dict{Int,Int}
     end
     return numBlockCols
 end
+
+function setBlocks()
+    dspenv.nblocks = getNumSubproblems(dspenv)
+    dspenv.block_ids = getBlockIds()
+    @dsp_ccall("setIntPtrParam", Cvoid, (Ptr{Cvoid}, Ptr{UInt8}, Cint, Ptr{Cint}),
+        dspenv.p, "ARR_PROC_IDX", convert(Cint, length(dspenv.block_ids)), convert(Vector{Cint}, dspenv.block_ids .- 1))
+end
+
+function parallelize(comm)
+    if @isdefined(MPI)
+        if MPI.Initialized()
+            dspenv.comm = comm
+            dspenv.comm_size = MPI.Comm_size(dspenv.comm)
+            dspenv.comm_rank = MPI.Comm_rank(dspenv.comm)
+        else
+            @error("MPI is not initialized.")
+        end
+    else
+        @error("MPI.jl is not defined.")
+    end
+end
+
+myrank() = dspenv.comm_rank
+mysize() = dspenv.comm_size
+myblocks(nblocks::Int) = getBlockIds(nblocks)
 
 #########################
 # Redefine JuMP functions
