@@ -12,6 +12,7 @@ addons:
       - libblas-dev
       - liblapack-dev
       - libtbb-dev
+      - libopenmpi-dev
 
 julia:
   - 1.4
