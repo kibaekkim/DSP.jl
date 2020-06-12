@@ -6,7 +6,8 @@ addons:
   ssh_known_hosts: 
     - xgitlab.cels.anl.gov
   addons:
-    ssh_known_hosts: xgitlab.cels.anl.gov
+    ssh_known_hosts: 
+      - xgitlab.cels.anl.gov
     apt:
       packages:
         - libtbb-dev
