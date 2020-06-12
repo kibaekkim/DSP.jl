@@ -50,7 +50,7 @@ for s = 1:3
 end
 
 status = optimize!(m, 
-    is_stochastic = true, # Needs to indicate that the model is NOT a stochastic program.
+    is_stochastic = true, # Needs to indicate that the model is a stochastic program.
     solve_type = DSP.Dual, # see instances(DSP.Methods) for other methods
 )
 
