@@ -25,7 +25,7 @@ before_install:
   - git lfs install
   - git clone git@xgitlab.cels.anl.gov:kimk/libDsp.git
   - ls libDsp # what do you have?
-  - export LD_LIBRARY_PATH=$PWD/libDsp:$LD_LIBRARY_PATH
+  - export LD_LIBRARY_PATH=$PWD/libDsp:$(dirname `gfortran --print-file-name libgfortran.so`):$LD_LIBRARY_PATH
 
 before_script:
   - ls # where I am?
