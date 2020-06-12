@@ -7,8 +7,13 @@ and solve the block-structured problem using the parallle solver ``DSP``.
 
 ## Intallation
 
-```julia
-Pkg.clone("https://github.com/kibaekkim/DSP.jl")
+Due to the dependency on `StructJuMP.jl`, we recommend to instantiate the package with `Manifest.toml`.
+To do so, please `clone` and `instantiate` the repo.
+
+```
+git clone git@github.com:kibaekkim/DSP.jl.git
+cd DSP.jl
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ```
 
 ## Examples
