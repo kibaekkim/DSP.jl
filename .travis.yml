@@ -4,7 +4,9 @@ os:
   - osx
 
 addons:
-  ssh_known_hosts: xgitlab.cels.anl.gov
+  ssh_known_hosts: 
+    - xgitlab.cels.anl.gov
+    - github.com
   homebrew:
     packages:
       - git-lfs
@@ -24,7 +26,7 @@ before_install:
   - export DYLD_LIBRARY_PATH=$PWD/libDsp:$DYLD_LIBRARY_PATH
 
 before_script:
-  - git clone git@github.com:kibaekkim/DSP.jl.git
+  - git clone -b dev/ci git@github.com:kibaekkim/DSP.jl.git
   - cd DSP.jl
 
 script:
