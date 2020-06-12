@@ -1,13 +1,13 @@
-# Dsp.jl
+# DSP.jl
 
-Dsp.jl is an interface to a parallel decomposition mixed-integer programming solver [DSP](https://github.com/Argonne-National-Laboratory/DSP). 
+DSP.jl is an interface to a parallel decomposition mixed-integer programming solver [DSP](https://github.com/Argonne-National-Laboratory/DSP). 
 This package allows users to define block structures in optimization model written in [StructJuMP](https://github.com/StructJuMP/StructJuMP.jl) 
 and solve the block-structured problem using the parallle solver ``DSP``.
 
 ## Intallation
 
 ```julia
-Pkg.clone("https://github.com/kibaekkim/Dsp.jl")
+Pkg.clone("https://github.com/kibaekkim/DSP.jl")
 ```
 
 ## Examples
@@ -18,13 +18,13 @@ Please find more examples in `./examples` particularly for `block` form.
 ```julia
 using MPI
 using StructJuMP
-using Dsp
+using DSP
 
 # Comment out this line if you want to run in serial
 MPI.Init()
 
-# Initialize Dsp.jl with the communicator.
-Dsp.parallelize(MPI.COMM_WORLD)
+# Initialize DSP.jl with the communicator.
+DSP.parallelize(MPI.COMM_WORLD)
 
 xi = [[7,7] [11,11] [13,13]]
 
@@ -44,7 +44,7 @@ end
 
 status = optimize!(m, 
     is_stochastic = true, # Needs to indicate that the model is NOT a stochastic program.
-    solve_type = Dsp.Dual, # see instances(Dsp.Methods) for other methods
+    solve_type = DSP.Dual, # see instances(DSP.Methods) for other methods
 )
 
 # Comment out this line if you want to run in serial

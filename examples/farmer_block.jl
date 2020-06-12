@@ -11,7 +11,7 @@ All variables should be declared at the parent model.
 """
 
 using StructJuMP
-using Dsp
+using DSP
 
 NS = 3;                        # number of scenarios
 probability = [1/3, 1/3, 1/3]; # probability
@@ -51,7 +51,7 @@ end
 
 status = optimize!(m, 
     is_stochastic = false, # Needs to indicate that the model is NOT a stochastic program.
-    solve_type = Dsp.ExtensiveForm, # see instances(Dsp.Methods) for other methods
+    solve_type = DSP.ExtensiveForm, # see instances(DSP.Methods) for other methods
     param = "examples/params.txt" # This path assumes running from the one-level upper directory (i.e., ../).
     )
 
@@ -59,5 +59,5 @@ if status == MOI.OPTIMAL
     @show objective_value(m)
     @show dual_objective_value(m)
     @show value.(x)
-    @show dual() # This is available only for solve_type = Dsp.Legacy.
+    @show dual() # This is available only for solve_type = DSP.Legacy.
 end

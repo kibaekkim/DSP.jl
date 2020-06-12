@@ -1,4 +1,4 @@
-name = "Dsp"
+name = "DSP"
 uuid = "f78f2366-c8db-5655-aef8-7bbe22c7f314"
 author = ["Kibaek Kim <kimk@anl.gov>"]
 version = "0.1.0"
