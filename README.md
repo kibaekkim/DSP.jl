@@ -1,4 +1,5 @@
 # DSP.jl
+[![Build Status](https://travis-ci.org/kibaekkim/DSP.jl.svg?branch=master)](https://travis-ci.org/kibaekkim/DSP.jl)
 
 DSP.jl is an interface to a parallel decomposition mixed-integer programming solver [DSP](https://github.com/Argonne-National-Laboratory/DSP). 
 This package allows users to define block structures in optimization model written in [StructJuMP](https://github.com/StructJuMP/StructJuMP.jl) 
