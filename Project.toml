@@ -14,7 +14,6 @@ StructJuMP = "34f15cae-5318-50c9-93d3-9feadd34e321"
 
 [compat]
 julia = "1.4"
-JuMP = "0.20"
 MPI = "0.14.3"
 MathOptInterface = "0.9.14"
 StructJuMP = "0.1.0"
