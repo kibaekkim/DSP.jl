@@ -1,7 +1,7 @@
-using Dsp
+using DSP
 using Test
 
-const dsp = Dsp.dspenv
+const dsp = DSP.dspenv
 
 @testset "Initializing DSP" begin
     @test dsp.p != C_NULL
@@ -14,7 +14,7 @@ const dsp = Dsp.dspenv
     @test dsp.nblocks == 0
     @test dsp.block_ids == []
     @test dsp.is_stochastic == false
-    @test dsp.solve_type == Dsp.Dual
+    @test dsp.solve_type == DSP.Dual
     @test isnothing(dsp.comm)
     @test dsp.comm_size == 1
     @test dsp.comm_rank == 0
@@ -22,14 +22,14 @@ end
 
 @testset "Setting options" begin
     @testset "param:" begin
-        Dsp.setoptions!(Dict(:param => "params.txt"))
+        DSP.setoptions!(Dict(:param => "params.txt"))
     end
     @testset "is_stochastic: $i" for i in [true, false]
-        Dsp.setoptions!(Dict(:is_stochastic => i))
+        DSP.setoptions!(Dict(:is_stochastic => i))
         @test dsp.is_stochastic == i
     end
-    @testset "solve_type: $t" for t in instances(Dsp.Methods)
-        Dsp.setoptions!(Dict(:solve_type => t))
+    @testset "solve_type: $t" for t in instances(DSP.Methods)
+        DSP.setoptions!(Dict(:solve_type => t))
         @test dsp.solve_type == t
     end
 end
@@ -39,7 +39,7 @@ end
     @testset "Parent model" begin
         @test length(m.variables) == 3
         @test length(m.constraints) == 1
-        start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname = Dsp.get_model_data(m)
+        start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname = DSP.get_model_data(m)
         @test length(start) == length(m.constraints) + 1
         @test start[end] == length(index)
         @test start == [0, 3]
@@ -57,7 +57,7 @@ end
         @test m.probability[i] == probability[i]
         @test length(subm.variables) == 6
         @test length(subm.constraints) == 4
-        start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname = Dsp.get_model_data(subm)
+        start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname = DSP.get_model_data(subm)
         @test length(start) == length(subm.constraints) + 1
         @test start[end] == length(index)
         @test start == [0, 3, 6, 9, 10]
@@ -73,23 +73,23 @@ end
     @testset "optimize!" begin
         dsp.is_stochastic = true
         @testset "load_problem!" begin
-            Dsp.load_problem!(m)
-            @test Dsp.getNumSubproblems(dsp) == 3
-            # @test Dsp.getTotalNumRows(dsp) == 13
-            @test Dsp.getTotalNumCols(dsp) == 21
+            DSP.load_problem!(m)
+            @test DSP.getNumSubproblems(dsp) == 3
+            # @test DSP.getTotalNumRows(dsp) == 13
+            @test DSP.getTotalNumCols(dsp) == 21
         end
-        @testset "Methods: $j" for j in instances(Dsp.Methods)
+        @testset "Methods: $j" for j in instances(DSP.Methods)
             @testset "solve!" begin
                 dsp.solve_type = j
-                Dsp.solve!()
+                DSP.solve!()
                 @test dsp.status == 3000
-                @test Dsp.termination_status(m) == MOI.OPTIMAL
+                @test DSP.termination_status(m) == MOI.OPTIMAL
             end
             @testset "post_solve!" begin
                 dsp.solve_type = j
-                Dsp.post_solve!()
+                DSP.post_solve!()
 
-                if dsp.solve_type in [Dsp.Dual, Dsp.ExtensiveForm]
+                if dsp.solve_type in [DSP.Dual, DSP.ExtensiveForm]
                     @test isapprox(objective_value(m), -108390.)
                 else
                     @test objective_value(m) >= -108390.
@@ -98,14 +98,14 @@ end
 
                 primsol = value()
                 dualsol = dual()
-                if dsp.solve_type == Dsp.Legacy
+                if dsp.solve_type == DSP.Legacy
                     for k = 0:3
                         @test primsol[k] != []
                     end
                     @test dualsol != []
                 else
                     @test isapprox(primsol[0], [170.0, 80.0, 250.0])
-                    if dsp.solve_type != Dsp.Benders
+                    if dsp.solve_type != DSP.Benders
                         @test isapprox(primsol[1], [0.0, 0.0, 310.0, 48.0, 6000.0, 0.0])
                         @test isapprox(primsol[2], [0.0, 0.0, 225.0, 0.0, 5000.0, 0.0])
                         @test isapprox(primsol[3], [0.0, 48.0, 140.0, 0.0, 4000.0, 0.0])
@@ -117,11 +117,11 @@ end
                 end
             end
             @testset "freeSolver" begin
-                Dsp.freeSolver(dsp)
+                DSP.freeSolver(dsp)
             end
         end
         @testset "freeModel" begin
-            Dsp.freeModel(dsp)
+            DSP.freeModel(dsp)
             @test dsp.p != C_NULL
             @test length(dsp.numRows) == 0
             @test length(dsp.numCols) == 0
@@ -132,7 +132,7 @@ end
             @test dsp.nblocks == 0
             @test dsp.block_ids == []
             @test dsp.is_stochastic == false
-            @test dsp.solve_type == Dsp.Dual
+            @test dsp.solve_type == DSP.Dual
         end
     end
 end
@@ -142,7 +142,7 @@ end
     @testset "Parent model" begin
         @test length(m.variables) == 27
         @test length(m.constraints) == 6
-        start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname = Dsp.get_model_data(m)
+        start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname = DSP.get_model_data(m)
         @test length(start) == length(m.constraints) + 1
         @test start[end] == length(index)
         @test start == [0, 2, 4, 6, 8, 10, 12]
@@ -168,7 +168,7 @@ end
         @test i > 0
         @test length(subm.variables) == 0
         @test length(subm.constraints) == 5
-        start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname = Dsp.get_model_data(subm)
+        start, index, value, rlbd, rubd, obj, clbd, cubd, ctype, cname = DSP.get_model_data(subm)
         @test length(start) == length(subm.constraints) + 1
         @test start[end] == length(index)
         @test start == [0, 3, 6, 9, 12, 13]
@@ -184,20 +184,20 @@ end
     @testset "optimize!" begin
         dsp.is_stochastic = false
         @testset "load_problem!" begin
-            Dsp.load_problem!(m)
-            @test Dsp.getNumSubproblems(dsp) == 3
-            # @test Dsp.getTotalNumRows(dsp) == 18
-            @test Dsp.getTotalNumCols(dsp) == 27
+            DSP.load_problem!(m)
+            @test DSP.getNumSubproblems(dsp) == 3
+            # @test DSP.getTotalNumRows(dsp) == 18
+            @test DSP.getTotalNumCols(dsp) == 27
         end
-        @testset "Methods: $j" for j in [Dsp.ExtensiveForm, Dsp.Dual]
+        @testset "Methods: $j" for j in [DSP.ExtensiveForm, DSP.Dual]
             @testset "solve!" begin
                 dsp.solve_type = j
-                Dsp.solve!()
+                DSP.solve!()
                 @test dsp.status == 3000
             end
             @testset "post_solve!" begin
                 dsp.solve_type = j
-                Dsp.post_solve!()
+                DSP.post_solve!()
 
                 @test isapprox(objective_value(m), -108390.)
                 @test isapprox(dual_objective_value(m), -108390.)
@@ -247,11 +247,11 @@ end
                 @test isapprox(value(w[4,3]), 0.0)
             end
             @testset "freeSolver" begin
-                Dsp.freeSolver(dsp)
+                DSP.freeSolver(dsp)
             end
         end
         @testset "freeModel" begin
-            Dsp.freeModel(dsp)
+            DSP.freeModel(dsp)
             @test dsp.p != C_NULL
             @test length(dsp.numRows) == 0
             @test length(dsp.numCols) == 0
@@ -262,13 +262,13 @@ end
             @test dsp.nblocks == 0
             @test dsp.block_ids == []
             @test dsp.is_stochastic == false
-            @test dsp.solve_type == Dsp.Dual
+            @test dsp.solve_type == DSP.Dual
         end
     end
 end
 
 @testset "Freeing DSP" begin
-    Dsp.freeEnv(dsp)
+    DSP.freeEnv(dsp)
     @test dsp.p == C_NULL
     @test length(dsp.numRows) == 0
     @test length(dsp.numCols) == 0
@@ -279,7 +279,7 @@ end
     @test dsp.nblocks == 0
     @test dsp.block_ids == []
     @test dsp.is_stochastic == false
-    @test dsp.solve_type == Dsp.Dual
+    @test dsp.solve_type == DSP.Dual
     @test isnothing(dsp.comm)
     @test dsp.comm_size == 1
     @test dsp.comm_rank == 0

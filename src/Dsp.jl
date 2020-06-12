@@ -1,4 +1,4 @@
-module Dsp
+module DSP
 
 @enum Methods begin
     ExtensiveForm
@@ -18,7 +18,7 @@ const MOI = MathOptInterface
 using JuMP # To reexport, should be using (not import)
 @SJ.exportall JuMP
 
-include("DspCInterface.jl")
+include("DSPCInterface.jl")
 
 function __init__()
     try
@@ -28,7 +28,7 @@ function __init__()
         elseif Sys.isapple()
             Libdl.dlopen("libDsp.dylib", Libdl.RTLD_GLOBAL)
         end
-        global dspenv = DspProblem()
+        global dspenv = DSPProblem()
     catch
         @warn("Could not load DSP shared library. Make sure it is in your library path.")
         rethrow()
@@ -209,7 +209,7 @@ function loadStochasticProblem!(model::SJ.StructuredModel)
         nrows2 = MPI.Allreduce([nrows2], MPI.MAX, dspenv.comm)[1]
     end
 
-    # set DspProblem data
+    # set DSPProblem data
     dspenv.numCols[0] = ncols1
     dspenv.numRows[0] = nrows1
     dspenv.colVal[0] = Vector{Float64}(undef, ncols1)
@@ -238,7 +238,7 @@ function loadStructuredProblem!(model::SJ.StructuredModel)
     ncols1 = length(model.variables)
     nrows1 = length(model.constraints)
 
-    # set DspProblem data
+    # set DSPProblem data
     dspenv.numCols[0] = ncols1
     dspenv.numRows[0] = nrows1
     dspenv.colVal[0] = Vector{Float64}(undef, ncols1)
