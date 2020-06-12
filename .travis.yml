@@ -15,15 +15,13 @@ before_install:
   - eval "$(ssh-agent -s)"
   - chmod 600 /tmp/deploy_rsa
   - ssh-add /tmp/deploy_rsa
-  - git lfs install
   - git clone git@xgitlab.cels.anl.gov:kimk/libDsp.git
-  - tar -zxvf DSP.tar.gz
+  - cd libDsp && tar -zxvf DSP.tar.gz && cd ..
   - export LD_LIBRARY_PATH=$PWD/libDsp:$PWD/libDsp/lib:$LD_LIBRARY_PATH
-  - ls libDsp # what do you have?
-  - ls libDsp/lib
 
 before_script:
   - ls # where I am?
+  - ls libDsp # what do you have?
 
 script:
   - julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.test(coverage=true);'
