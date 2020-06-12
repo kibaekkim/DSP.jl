@@ -115,7 +115,7 @@ function freeModel(dsp::DSPProblem)
     dsp.objective_sense = 1.
     dsp.status = 3998
     dsp.solve_time = 0.
-    dsp.nblocks = 0
+    dsp.nblocks = -1
     dsp.block_ids = []
     dsp.is_stochastic = false
     dsp.solve_type = Dual

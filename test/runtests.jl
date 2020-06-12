@@ -11,7 +11,7 @@ const dsp = DSP.dspenv
     @test isnan(dsp.dualVal)
     @test length(dsp.colVal) == 0
     @test length(dsp.rowVal) == 0
-    @test dsp.nblocks == 0
+    @test dsp.nblocks == -1
     @test dsp.block_ids == []
     @test dsp.is_stochastic == false
     @test dsp.solve_type == DSP.Dual
@@ -129,7 +129,7 @@ end
             @test isnan(dsp.dualVal)
             @test length(dsp.colVal) == 0
             @test length(dsp.rowVal) == 0
-            @test dsp.nblocks == 0
+            @test dsp.nblocks == -1
             @test dsp.block_ids == []
             @test dsp.is_stochastic == false
             @test dsp.solve_type == DSP.Dual
@@ -259,7 +259,7 @@ end
             @test isnan(dsp.dualVal)
             @test length(dsp.colVal) == 0
             @test length(dsp.rowVal) == 0
-            @test dsp.nblocks == 0
+            @test dsp.nblocks == -1
             @test dsp.block_ids == []
             @test dsp.is_stochastic == false
             @test dsp.solve_type == DSP.Dual
@@ -276,7 +276,7 @@ end
     @test isnan(dsp.dualVal)
     @test length(dsp.colVal) == 0
     @test length(dsp.rowVal) == 0
-    @test dsp.nblocks == 0
+    @test dsp.nblocks == -1
     @test dsp.block_ids == []
     @test dsp.is_stochastic == false
     @test dsp.solve_type == DSP.Dual

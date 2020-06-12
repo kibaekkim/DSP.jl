@@ -22,12 +22,7 @@ include("DSPCInterface.jl")
 
 function __init__()
     try
-        # path_to_lib = ENV["JULIA_DSP_LIBRARY_PATH"]
-        if Sys.islinux()
-            Libdl.dlopen("libDsp.so", Libdl.RTLD_GLOBAL)
-        elseif Sys.isapple()
-            Libdl.dlopen("libDsp.dylib", Libdl.RTLD_GLOBAL)
-        end
+        Libdl.dlopen("libDsp", Libdl.RTLD_GLOBAL)
         global dspenv = DSPProblem()
     catch
         @warn("Could not load DSP shared library. Make sure it is in your library path.")

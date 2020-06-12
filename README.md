@@ -1,4 +1,6 @@
 # DSP.jl
+[![Build Status](https://travis-ci.org/kibaekkim/DSP.jl.svg?branch=master)](https://travis-ci.org/kibaekkim/DSP.jl)
+[![codecov](https://codecov.io/gh/kibaekkim/Dsp.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/kibaekkim/Dsp.jl)
 
 DSP.jl is an interface to a parallel decomposition mixed-integer programming solver [DSP](https://github.com/Argonne-National-Laboratory/DSP). 
 This package allows users to define block structures in optimization model written in [StructJuMP](https://github.com/StructJuMP/StructJuMP.jl) 
@@ -6,8 +8,13 @@ and solve the block-structured problem using the parallle solver ``DSP``.
 
 ## Intallation
 
-```julia
-Pkg.clone("https://github.com/kibaekkim/DSP.jl")
+Due to the dependency on `StructJuMP.jl`, we recommend to instantiate the package with `Manifest.toml`.
+To do so, please `clone` and `instantiate` the repo.
+
+```
+git clone git@github.com:kibaekkim/DSP.jl.git
+cd DSP.jl
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ```
 
 ## Examples
