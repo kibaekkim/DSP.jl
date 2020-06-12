@@ -26,8 +26,7 @@ before_install:
   - export DYLD_LIBRARY_PATH=$PWD/libDsp:$DYLD_LIBRARY_PATH
 
 before_script:
-  - git clone -b dev/ci git@github.com:kibaekkim/DSP.jl.git
-  - cd DSP.jl
+  - ls # where I am?
 
 script:
   - julia --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.test(coverage=true);'
