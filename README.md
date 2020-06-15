@@ -8,6 +8,8 @@ and solve the block-structured problem using the parallle solver ``DSP``.
 
 ## Intallation
 
+> **_NOTE:_** You need to install solver [DSP](https://github.com/Argonne-National-Laboratory/DSP) first. This package provides an interface only.
+
 Due to the dependency on `StructJuMP.jl`, we recommend to instantiate the package with `Manifest.toml`.
 To do so, please `clone` and `instantiate` the repo.
 
