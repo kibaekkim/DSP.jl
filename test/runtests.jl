@@ -1,5 +1,6 @@
 using DSP
 using Test
+using SparseArrays
 
 const dsp = DSP.dspenv
 
@@ -70,56 +71,37 @@ end
         @test cubd == zeros(6) .+ Inf
         @test ctype == "CCCCCC"
     end
-    @testset "optimize!" begin
+    @testset "optimize!: $j" for j in instances(DSP.Methods)
         dsp.is_stochastic = true
-        @testset "load_problem!" begin
-            DSP.load_problem!(m)
-            @test DSP.getNumSubproblems(dsp) == 3
-            # @test DSP.getTotalNumRows(dsp) == 13
-            @test DSP.getTotalNumCols(dsp) == 21
+        status = DSP.optimize!(m, is_stochastic = true, solve_type = j)
+        @test DSP.termination_status(m) == MOI.OPTIMAL
+        if dsp.solve_type in [DSP.Dual, DSP.ExtensiveForm]
+            @test isapprox(objective_value(m), -108390.)
+        else
+            @test objective_value(m) >= -108390.
         end
-        @testset "Methods: $j" for j in instances(DSP.Methods)
-            @testset "solve!" begin
-                dsp.solve_type = j
-                DSP.solve!()
-                @test dsp.status == 3000
-                @test DSP.termination_status(m) == MOI.OPTIMAL
-            end
-            @testset "post_solve!" begin
-                dsp.solve_type = j
-                DSP.post_solve!()
+        @test isapprox(dual_objective_value(m), -108390.)
 
-                if dsp.solve_type in [DSP.Dual, DSP.ExtensiveForm]
-                    @test isapprox(objective_value(m), -108390.)
-                else
-                    @test objective_value(m) >= -108390.
-                end
-                @test isapprox(dual_objective_value(m), -108390.)
-
-                primsol = value()
-                dualsol = dual()
-                if dsp.solve_type == DSP.Legacy
-                    for k = 0:3
-                        @test primsol[k] != []
-                    end
-                    @test dualsol != []
-                else
-                    @test isapprox(primsol[0], [170.0, 80.0, 250.0])
-                    if dsp.solve_type != DSP.Benders
-                        @test isapprox(primsol[1], [0.0, 0.0, 310.0, 48.0, 6000.0, 0.0])
-                        @test isapprox(primsol[2], [0.0, 0.0, 225.0, 0.0, 5000.0, 0.0])
-                        @test isapprox(primsol[3], [0.0, 48.0, 140.0, 0.0, 4000.0, 0.0])
-                    end
-                    @test dualsol == []
-                    @test isapprox(value(x[1]), 170.0)
-                    @test isapprox(value(x[2]), 80.0)
-                    @test isapprox(value(x[3]), 250.0)
-                end
+        primsol = value()
+        dualsol = dual()
+        if dsp.solve_type == DSP.Legacy
+            for k = 0:3
+                @test primsol[k] != []
             end
-            @testset "freeSolver" begin
-                DSP.freeSolver(dsp)
+            @test dualsol != []
+        else
+            @test isapprox(primsol[0], [170.0, 80.0, 250.0])
+            if dsp.solve_type != DSP.Benders
+                @test isapprox(primsol[1], [0.0, 0.0, 310.0, 48.0, 6000.0, 0.0])
+                @test isapprox(primsol[2], [0.0, 0.0, 225.0, 0.0, 5000.0, 0.0])
+                @test isapprox(primsol[3], [0.0, 48.0, 140.0, 0.0, 4000.0, 0.0])
             end
+            @test dualsol == []
+            @test isapprox(value(x[1]), 170.0)
+            @test isapprox(value(x[2]), 80.0)
+            @test isapprox(value(x[3]), 250.0)
         end
+        DSP.freeSolver(dsp)
         @testset "freeModel" begin
             DSP.freeModel(dsp)
             @test dsp.p != C_NULL
@@ -146,7 +128,8 @@ end
         @test length(start) == length(m.constraints) + 1
         @test start[end] == length(index)
         @test start == [0, 2, 4, 6, 8, 10, 12]
-        @test index == [0, 1, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8]
+        # NOTE: The order of variable indices has been changed in JuMP v0.21. Some tests fail.
+        @test index == [0, 1, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8] # will fail with JuMP v0.21
         @test value == [1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1.]
         @test rlbd == zeros(6)
         @test rubd == zeros(6)
@@ -159,7 +142,7 @@ end
             -probability[1]*Sell[1], -probability[2]*Sell[1], -probability[3]*Sell[1],
             -probability[1]*Sell[2], -probability[2]*Sell[2], -probability[3]*Sell[2],
             -probability[1]*Sell[3], -probability[2]*Sell[3], -probability[3]*Sell[3],
-            -probability[1]*Sell[4], -probability[2]*Sell[4], -probability[3]*Sell[4]]
+            -probability[1]*Sell[4], -probability[2]*Sell[4], -probability[3]*Sell[4]] # will fail with JuMP v0.21
         @test clbd == zeros(27)
         @test cubd == zeros(27) .+ Inf
         @test ctype == "IIIIIIIIICCCCCCCCCCCCCCCCCC"
@@ -172,7 +155,7 @@ end
         @test length(start) == length(subm.constraints) + 1
         @test start[end] == length(index)
         @test start == [0, 3, 6, 9, 12, 13]
-        @test index == [0, 3, 6,  0, 9, 15,  3, 12, 18,  6, 21, 24,  21] .+ (i-1)
+        @test index == [0, 3, 6,  0, 9, 15,  3, 12, 18,  6, 21, 24,  21] .+ (i-1) # will fail with JuMP v0.21
         @test value == [1., 1., 1.,  Yield[i,1], 1., -1.,  Yield[i,2], 1., -1.,  Yield[i,3], -1., -1., 1.]
         @test rlbd == [-Inf; Minreq; -Inf]
         @test rubd == [Budget, Inf, Inf, Inf, 6000]
@@ -181,75 +164,46 @@ end
         @test cubd == []
         @test ctype == ""
     end
-    @testset "optimize!" begin
-        dsp.is_stochastic = false
-        @testset "load_problem!" begin
-            DSP.load_problem!(m)
-            @test DSP.getNumSubproblems(dsp) == 3
-            # @test DSP.getTotalNumRows(dsp) == 18
-            @test DSP.getTotalNumCols(dsp) == 27
-        end
-        @testset "Methods: $j" for j in [DSP.ExtensiveForm, DSP.Dual]
-            @testset "solve!" begin
-                dsp.solve_type = j
-                DSP.solve!()
-                @test dsp.status == 3000
-            end
-            @testset "post_solve!" begin
-                dsp.solve_type = j
-                DSP.post_solve!()
+    @testset "optimize!: $j" for j in [DSP.ExtensiveForm, DSP.Dual]
+        status = DSP.optimize!(m, solve_type = j, is_stochastic = false)
+        @test status == MOI.OPTIMAL
+        @test isapprox(objective_value(m), -108390.)
+        @test isapprox(dual_objective_value(m), -108390.)
 
-                @test isapprox(objective_value(m), -108390.)
-                @test isapprox(dual_objective_value(m), -108390.)
-
-                primsol = value()
-                dualsol = dual()
-                @test isapprox(primsol[0], [
-                    170.0, 170.0, 170.0, 
-                    80.0, 80.0, 80.0, 
-                    250.0, 250.0, 250.0, 
-                    0.0, 0.0, 0.0, 
-                    0.0, 0.0, 48.0, 
-                    310.0, 225.0, 140.0, 
-                    48.0, 0.0, 0.0, 
-                    6000.0, 5000.0, 4000.0, 
-                    0.0, 0.0, 0.0])
-                for s = 1:3
-                    @test primsol[s] == []
-                end
-                @test dualsol == []
-                @test isapprox(value(x[1,1]), 170.0)
-                @test isapprox(value(x[1,2]), 170.0)
-                @test isapprox(value(x[1,3]), 170.0)
-                @test isapprox(value(x[2,1]), 80.0)
-                @test isapprox(value(x[2,2]), 80.0)
-                @test isapprox(value(x[2,3]), 80.0)
-                @test isapprox(value(x[3,1]), 250.0)
-                @test isapprox(value(x[3,2]), 250.0)
-                @test isapprox(value(x[3,3]), 250.0)
-                @test isapprox(value(y[1,1]), 0.0)
-                @test isapprox(value(y[1,2]), 0.0)
-                @test isapprox(value(y[1,3]), 0.0)
-                @test isapprox(value(y[2,1]), 0.0)
-                @test isapprox(value(y[2,2]), 0.0)
-                @test isapprox(value(y[2,3]), 48.0)
-                @test isapprox(value(w[1,1]), 310.0)
-                @test isapprox(value(w[1,2]), 225.0)
-                @test isapprox(value(w[1,3]), 140.0)
-                @test isapprox(value(w[2,1]), 48.0)
-                @test isapprox(value(w[2,2]), 0.0)
-                @test isapprox(value(w[2,3]), 0.0)
-                @test isapprox(value(w[3,1]), 6000.0)
-                @test isapprox(value(w[3,2]), 5000.0)
-                @test isapprox(value(w[3,3]), 4000.0)
-                @test isapprox(value(w[4,1]), 0.0)
-                @test isapprox(value(w[4,2]), 0.0)
-                @test isapprox(value(w[4,3]), 0.0)
-            end
-            @testset "freeSolver" begin
-                DSP.freeSolver(dsp)
-            end
+        primsol = value()
+        dualsol = dual()
+        for s = 1:3
+            @test primsol[s] == []
         end
+        @test dualsol == []
+        @test isapprox(value(x[1,1]), 170.0)
+        @test isapprox(value(x[1,2]), 170.0)
+        @test isapprox(value(x[1,3]), 170.0)
+        @test isapprox(value(x[2,1]), 80.0)
+        @test isapprox(value(x[2,2]), 80.0)
+        @test isapprox(value(x[2,3]), 80.0)
+        @test isapprox(value(x[3,1]), 250.0)
+        @test isapprox(value(x[3,2]), 250.0)
+        @test isapprox(value(x[3,3]), 250.0)
+        @test isapprox(value(y[1,1]), 0.0)
+        @test isapprox(value(y[1,2]), 0.0)
+        @test isapprox(value(y[1,3]), 0.0)
+        @test isapprox(value(y[2,1]), 0.0)
+        @test isapprox(value(y[2,2]), 0.0)
+        @test isapprox(value(y[2,3]), 48.0)
+        @test isapprox(value(w[1,1]), 310.0)
+        @test isapprox(value(w[1,2]), 225.0)
+        @test isapprox(value(w[1,3]), 140.0)
+        @test isapprox(value(w[2,1]), 48.0)
+        @test isapprox(value(w[2,2]), 0.0)
+        @test isapprox(value(w[2,3]), 0.0)
+        @test isapprox(value(w[3,1]), 6000.0)
+        @test isapprox(value(w[3,2]), 5000.0)
+        @test isapprox(value(w[3,3]), 4000.0)
+        @test isapprox(value(w[4,1]), 0.0)
+        @test isapprox(value(w[4,2]), 0.0)
+        @test isapprox(value(w[4,3]), 0.0)
+        DSP.freeSolver(dsp)
         @testset "freeModel" begin
             DSP.freeModel(dsp)
             @test dsp.p != C_NULL
