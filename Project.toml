@@ -13,11 +13,11 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StructJuMP = "34f15cae-5318-50c9-93d3-9feadd34e321"
 
 [compat]
-julia = "1.4"
 JuMP = "0.20.1"
 MPI = "0.14.3"
 MathOptInterface = "0.9.14"
 StructJuMP = "0.1.0"
+julia = "1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
