@@ -3,18 +3,9 @@
 using Pkg
 using SparseArrays
 using StructJuMP
+using MPI
 
 const SJ = StructJuMP
-
-# Use MPI only if installed
-deps = Pkg.dependencies()
-for (uuid, dep) in deps
-    dep.is_direct_dep || continue
-    dep.version === nothing && continue
-    if dep.name == "MPI"
-        using MPI
-    end
-end
 
 mutable struct DSPProblem
     p::Ptr{Cvoid}
