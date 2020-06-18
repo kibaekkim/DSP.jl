@@ -80,7 +80,7 @@ end
         else
             @test objective_value(m) >= -108390.
         end
-        @test isapprox(dual_objective_value(m), -108390.)
+        @test isapprox(dual_objective_value(m), -108390., atol=0.1)
 
         primsol = value()
         dualsol = dual()
