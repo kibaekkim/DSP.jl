@@ -1,4 +1,7 @@
-# DSP.jl
+# DSP.jl (deprecated)
+
+This repository has been moved to [DSPopt.jl](https://github.com/kibaekkim/DSPopt.jl).
+
 ![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/kibaekkim/DSP.jl?label=release&sort=semver)
 [![Build Status](https://travis-ci.org/kibaekkim/DSP.jl.svg?branch=master)](https://travis-ci.org/kibaekkim/DSP.jl)
 [![codecov](https://codecov.io/gh/kibaekkim/Dsp.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/kibaekkim/Dsp.jl)
