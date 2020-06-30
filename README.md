@@ -1,4 +1,5 @@
 # DSP.jl
+![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/kibaekkim/DSP.jl?label=release&sort=semver)
 [![Build Status](https://travis-ci.org/kibaekkim/DSP.jl.svg?branch=master)](https://travis-ci.org/kibaekkim/DSP.jl)
 [![codecov](https://codecov.io/gh/kibaekkim/Dsp.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/kibaekkim/Dsp.jl)
 
@@ -10,13 +11,8 @@ and solve the block-structured problem using the parallle solver ``DSP``.
 
 > **_NOTE:_** You need to install solver [DSP](https://github.com/Argonne-National-Laboratory/DSP) first. This package provides an interface only.
 
-Due to the dependency on `StructJuMP.jl`, we recommend to instantiate the package with `Manifest.toml`.
-To do so, please `clone` and `instantiate` the repo.
-
-```
-git clone git@github.com:kibaekkim/DSP.jl.git
-cd DSP.jl
-julia --project=. -e 'using Pkg; Pkg.instantiate()'
+```julia
+] add https://github.com/kibaekkim/DSP.jl.git
 ```
 
 ## Examples
